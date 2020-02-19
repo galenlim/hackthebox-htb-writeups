@@ -152,9 +152,6 @@ A DNS server has two main purposes:
 1. Sharing its data with other DNS servers (Zone transfers)
 2. Answering DNS queries (replying with an IP address in response to a name query)
 
-### What is TCP?
-
-
 ### What is our interest in DNS?
 
 From [InfoSec](https://resources.infosecinstitute.com/what-is-enumeration/)
