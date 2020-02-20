@@ -202,9 +202,3 @@ You can also use Metasploit or other available exploits to root this box.
 * https://blog.knapsy.com/blog/2014/10/07/basic-shellshock-exploitation/
 * https://github.com/opsxcq/exploit-CVE-2014-6271
 * https://www.surevine.com/shellshocked-a-quick-demo-of-how-easy-it-is-to-exploit/ (A simple demo)
-
-`nmap -sV -p 80 --script http-shellshock 10.10.10.56`
-
-
-tcpdump -i tun0 -n icmp
-I learned to the basics of using Burp from George Weidman's book.
