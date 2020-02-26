@@ -578,4 +578,3 @@ This is a tough but satisfying one to write.
 * [GDB cheatsheet](https://darkdust.net/files/GDB%20Cheat%20Sheet.pdf)
 * [x64 asm cheatsheet](https://cs.brown.edu/courses/cs033/docs/guides/x64_cheatsheet.pdf)
 * [Return to PLT](https://www.ret2rop.com/2018/08/return-to-plt-got-to-bypass-aslr-remote.html)
-* [Metasploit payload reference](https://netsec.ws/?p=331)
