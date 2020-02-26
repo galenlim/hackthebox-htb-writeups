@@ -1,5 +1,5 @@
 
-![mirai badge](images/miraibadge.jpg)
+![mirai badge](images/mirai/miraibadge.jpg)
 
 Mirai is a Linux machine rated Easy on HTB.
 
@@ -21,7 +21,7 @@ Start with nmap to get the lay of the land.
 * `-sV` - version scan
 * `-oA` - output all formats with the filename initial
 
-![mirai nmap scan](images/mirainmap.jpg)
+![mirai nmap scan](images/mirai/mirainmap.jpg)
 
 We have three ports.
 
@@ -50,7 +50,7 @@ A good first step when approaching any application is to assume the user's role.
 
 You'll see a blank page.
 
-![blank homepage](images/miraibrowser.jpg)
+![blank homepage](images/mirai/miraibrowser.jpg)
 
 ### curl
 
@@ -96,9 +96,9 @@ Although the index page is not found, other pages might be accessible. To find t
 3. Uncheck the Recursive option to save time by skipping subfolders at this point
 4. Click Start
 
-![dirbuster setting](images/miraidirb.jpg)
+![dirbuster setting](images/mirai/miraidirb.jpg)
 
-![dirbuster result](images/miraidirbresult.jpg)
+![dirbuster result](images/mirai/miraidirbresult.jpg)
 
 There are two directories (Type:Dir) and were able to access them. (Response Code:200).
 
@@ -109,11 +109,11 @@ There are two directories (Type:Dir) and were able to access them. (Response Cod
 
 `http://10.10.10.48/admin`
 
-![admin](images/miraiadmin.jpg)
+![admin](images/mirai/miraiadmin.jpg)
 
 Check out the Login page.
 
-![login](images/mirailogin.jpg)
+![login](images/mirai/mirailogin.jpg)
 
 ### What is Pi-hole?
 

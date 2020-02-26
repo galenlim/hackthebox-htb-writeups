@@ -1,5 +1,5 @@
 
-![shocker badge](images/shockerbadge.jpg)
+![shocker badge](images/shocker/shockerbadge.jpg)
 
 Shocker is a Linux machine rated Easy on HTB.
 
@@ -13,7 +13,7 @@ Shocker is a likely reference to the [Shell Shock vulnerability](https://en.wiki
 
 `nmap -sC -sV -oA initial 10.10.10.56`
 
-![nmap results](images/shockernmap.jpg)
+![nmap results](images/shocker/shockernmap.jpg)
 
 We have two ports to probe. (80 and 2222)
 
@@ -21,7 +21,7 @@ Before we dive into them, let's start another nmap scan to cover all ports.
 
 `nmap -p- -oA all 10.10.10.56`
 
-![scan all](images/shockernmapall.jpg)
+![scan all](images/shocker/shockernmapall.jpg)
 
 The service identified is based on the typical services associated with each port. It may not be accurate. Compare the SERVICE on port 2222 with our initial scan with version detection.
 
@@ -35,7 +35,7 @@ These are standard starting points for webservers:
 
 ### Browsing
 
-![bug](images/dontbugme.jpg)
+![bug](images/shocker/dontbugme.jpg)
 
 This image pretty much confirms that we need to look for a shellshock vulnerability here.
 
@@ -60,7 +60,7 @@ This vulnerability allows code to be executed by a remote attacker who is manipu
 
 The cgi-bin holds server-side scripts, so it's the natural attack vector. Let's see if it exists.
 
-![cgi-bin](images/cgi403.jpg)
+![cgi-bin](images/shocker/cgi403.jpg)
 
 403 Forbidden means that we are not authorized to access, but it does exist.
 
@@ -69,11 +69,11 @@ Now, let's look for scripts that we can use to test for shell shock. While we ma
 **Set up a scan with dirbuster.**
 * Look for common cgi script filetypes like shell, perl, or php scripts.
 
-![dirbuster setup](images/dirbustersetup.jpg)
+![dirbuster setup](images/shocker/dirbustersetup.jpg)
 
 **Dirbuster Results**
 
-![shell script](images/shellscript.jpg)
+![shell script](images/shocker/shellscript.jpg)
 
 The file **user.sh** might be what we are looking for.
 
@@ -94,7 +94,7 @@ Enter this as the User-Agent value.
 
 `() { :; }; echo; /bin/bash -c 'cat /etc/passwd'`
 
-![burp repeater](images/shockerburprepeater.jpg)
+![burp repeater](images/shocker/shockerburprepeater.jpg)
 
 Look at the response on the right-hand side. The passwd file is returned as part of the response.
 
