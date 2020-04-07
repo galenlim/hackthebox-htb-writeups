@@ -25,7 +25,7 @@ PORT   STATE SERVICE VERSION
 |_http-title: Help us
 Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
 ```
-I also ran a scan of all ports that did not uncover more ports of interest.
+I also ran a scan of all ports  but that did not uncover more ports of interest.
 
 ### HTTP
 
@@ -184,11 +184,7 @@ Usage: /home/sysadmin/luvit [options] script.lua [arguments]
     -h, --help          Print this help screen.
     -v, --version       Print the version.
     -e code_chunk       Evaluate code chunk and print result.
-    -i, --interactive   Enter interactive repl after executing script.
-    -n, --no-color      Disable colors.
-    -c, --16-colors     Use simple ANSI colors
-    -C, --256-colors    Use 256-mode ANSI colors
-                        (Note, if no script is provided, a repl is run instead.)
+		<SNIP>
 ```
 With the -e flag, we can evaluate lua code. So the next step is to learn lua.
 
@@ -271,10 +267,10 @@ As for writable scripts, LinENum does not explicitly look for them. So let's run
 
 `find / -writable -xdev 2>/dev/null | grep -v -E "/home/sysadmin|/tmp|/lib"`
 
-* xdev - avoids different filesystems like /proc and /run
-* 2>/dev/null - suppresses error messages
+* `xdev` - avoids different filesystems like /proc and /run
+* `2>/dev/null` - suppresses error messages
 
-The second part of the command is an **inverse grep** to help us filter away folders we are not interested in. Vary this part to fit your purpose. Since I have already manually looked through /home/sysadmin and /tmp, I exclude them here.
+The second part of the command is an **inverse grep** to help us filter out folders we are not interested in. Vary this part to fit your purpose. Since I have already manually looked through /home/sysadmin and /tmp, I exclude them here.
 
 The results:
 
