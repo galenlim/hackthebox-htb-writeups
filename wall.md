@@ -1,4 +1,4 @@
-# Wall - hackthebox.eu
+# Wall Writeup - HTB
 
 ![wall badge](images/wall/wallbadge.jpg)
 

@@ -1,5 +1,4 @@
-
-# Safe - hackthebox.eu
+# Safe Writeup - HTB
 
 ![safe badge](images/safe/safebadge.jpg)
 
