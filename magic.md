@@ -328,3 +328,8 @@ This is an enjoyable box that reinforces some fundamentals.
 * https://www.whitewinterwolf.com/posts/2017/12/02/wwwolfs-php-webshell-users-guide/
 * https://security.stackexchange.com/questions/213641/why-does-the-file-shell-php-jpg-can-execute-as-a-php-file-but-shell-jpg-cann
 * https://www.pivotpointsecurity.com/blog/secure-file-upload-attack-vulnerabilities/
+
+**Apache Misconfiguration**
+
+* https://blog.remirepo.net/post/2013/01/13/PHP-and-Apache-SetHandler-vs-AddHandler
+* https://www.apachelounge.com/viewtopic.php?t=7763 
