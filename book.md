@@ -97,7 +97,7 @@ How this SQL truncation attack works:
 
 * First, the web app compares our email with the existing registered emails, it does not find clashes as we appended a series of spaces and a random string to it. 
 * Hence, the database proceeds to INSERT.
-* However, as the email column is configured to accept only 20 characters, it truncates the email to 20 characters, before storing it as "admin@book.htb" without the trailing spaces.
+* However, as the email column is configured to accept only 20 characters, it truncates the email to 20 characters, before storing it as "admin@book.htb      ". (With the trailing spaces, the attack should not have worked. But the PHP code that handles the admin login request is flawed. [Look at IppSec's video here to learn more.](https://www.youtube.com/watch?v=RBtN5939m3g&t=4825s))
 * Now, the table contains a row with the admin email and a password of our choice (123456789).
 
 Now, let's try to log from `/admin` with the following credentials:
@@ -203,7 +203,7 @@ How does it work:
 * If the log directory is swapped with a symlink pointing to another location, we can create a new file at that location.
 * Because logrotate runs as root, it can write into any location.
 * By default, the file is created with the same permissions as the original log file. 
-* Since the attacker can write to the original log file, the attack can also write to this newly created file.
+* Since the attacker can write to the original log file, the attacker can also write to this newly created file.
 
 A typical exploitation path for privilege escalation is to write a payload into `/etc/bash_completion.d` so that it will be executed when root logs in. 
 
@@ -298,6 +298,7 @@ Overall, a very educational box for me.
 
 * https://resources.infosecinstitute.com/sql-truncation-attack/#gref
 * https://docs.microsoft.com/en-us/archive/msdn-magazine/2006/november/sql-security-new-sql-truncation-attacks-and-how-to-avoid-them
+* Explanation of why the SQL truncation works by IppSec - https://www.youtube.com/watch?v=RBtN5939m3g&t=4825s
 
 **Logrotate and Logrotten**
 
