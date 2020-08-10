@@ -1,5 +1,5 @@
 
-# Cascade - hackthebox
+# Cascade Write-up / Walkthrough - HTB
 
 ![cascade badge](images/cascade/cascadebadge.jpg)
 
@@ -325,3 +325,8 @@ Also, it is a nice progression from Nest by the same author. I spent less time s
 
 * https://docs.oracle.com/cd/E19450-01/820-6169/ldapsearch-examples.html#gentextid-4476 
 * https://devconnected.com/how-to-search-ldap-using-ldapsearch-examples/
+
+**VNC Key Decrypt**
+
+* https://github.com/frizb/PasswordDecrypts
+* https://github.com/trinitronx/vncpasswd.py
