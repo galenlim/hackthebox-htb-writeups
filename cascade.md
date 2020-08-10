@@ -66,6 +66,10 @@ sAMAccountName: r.thompson
 cascadeLegacyPwd: clk0bjVldmE=
 ```
 
+We can decode the password as follows:
+
+`echo clk0bjVldmE= | base64 -d`
+
 Now that we have a set of credentials, it's time to try it out on other services.
 
 ## SMB Enumeration

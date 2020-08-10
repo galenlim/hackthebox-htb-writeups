@@ -1,4 +1,4 @@
-# Book - hackthebox
+# Book Write-up / Walkthrough - HTB
 
 ![book badge](images/book/bookbadge.jpg)
 
