@@ -1,5 +1,5 @@
 
-# Monteverde - hackthebox
+# Monteverde Write-up / Walkthrough - HTB
 
 ![monteverde badge](images/monteverde/montbadge.jpg)
 
@@ -41,7 +41,7 @@ We can use enum4linux for broad enumeration through RPC and SMB protocols.
 
 `enum4linux 10.10.10.172 | grep -v uninitialized | tee enum4linux.out`
 
-Enum4linux produces many error messages, so an inverse grep is used here to remove the error messages before saving it to the file `enum4linux.out`.
+Enum4linux (at least the one I'm using) produces many error messages, so an inverse grep is used here to remove the error messages before saving it to the file `enum4linux.out`.
 
 The `tee` commands prints the results to stdout as well so that we can review sooner.
 
