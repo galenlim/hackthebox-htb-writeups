@@ -1,4 +1,4 @@
-# Nest - hackthebox.eu
+# Nest Write-up / Walkthrough - HTB
 
 ![nest badge](images/nest/nestbadge.jpg)
 
@@ -35,14 +35,9 @@ There are only two open ports. Let's start with the more familiar SMB port.
 
 Let's start by enumerating the shares with smbmap.
 
-The first command fails to return anything, probably because as null sessions (unauthenticated) are not enabled.
-
-However, trying to list shares using a guest account is fruitful. This `-R` flag lists the shares and its contents recursively.
+The command below lists shares using a guest account. This `-R` flag lists the shares and its contents recursively.
 
 ```
-root@kali:~/htb# smbmap -H 10.10.10.178
-[+] IP: 10.10.10.178:445	Name: 10.10.10.178                                      
-
 root@kali:~/htb# smbmap -H 10.10.10.178 -u guest -R
 [+] IP: 10.10.10.178:445	Name: 10.10.10.178                                      
         Disk                                                  	Permissions	Comment
@@ -116,7 +111,7 @@ Again, we can enumerate the shares, but this time, with TempUser's permissions.
 
 After looking through the results, it seems like there's more to look through this time, especially in the Data share.
 
-Let's mount the share, so that we can grep through its contents. (CIFS is a dialect of SMB.)
+Let's mount the share, so that we can grep through its contents. (CIFS is a dialect of SMB so that's the file system type used for mounting SMB.)
 
 ```
 root@kali:/mnt# mount -t cifs -o username=TempUser //10.10.10.178/Data /mnt/Data
@@ -208,8 +203,8 @@ Public Shared Function DecryptString(EncryptedString As String) As String
 
 Now we have:
 
-* An encrypted password (RU_config.xml)
-* VB source code with the decryption function (Utils.vb)
+* An encrypted password (in RU_config.xml)
+* VB source code with the decryption function (in Utils.vb)
 
 The next step is to recover the password.
 
@@ -363,7 +358,7 @@ System.Security.Cryptography.CryptographicException
 
 It probably means that we are not decrypting it the same way as it was encrypted.
 
-This encrypted password comes from a file for LDAP configuration, implying that the key to decrypting this password is in a LDAP program. The obvious candidate here is the **HqkLdap.exe** software found in the same folder.
+This encrypted password comes from a file for LDAP configuration, implying that the key to decrypting this password is in a program that works with LDAP. The obvious candidate here is the **HqkLdap.exe** software found in the same folder.
 
 Although we cannot download files using the HQK service, recall that we came across this file in our earlier recon of c.smith's folder. So let's return to the SMB share and download the the binary.
 
@@ -389,7 +384,7 @@ root@kali:~/htb/nest# file HqkLdap.exe
 HqkLdap.exe: PE32 executable (console) Intel 80386 Mono/.Net assembly, for MS Windows
 ```
 
-However, as this is a .NET assembly, ollydbg does not work. [JetBrains dotPeek](https://www.jetbrains.com/decompiler/) works well here.
+However, as this is a .NET assembly, ollydbg does not work. [JetBrains dotPeek](https://www.jetbrains.com/decompiler/) works well here if you have access to a Windows host. 
 
 ![decompiled](images/nest/dotPeek.jpg)
 
@@ -437,8 +432,9 @@ Copyright (c) 2009 Microsoft Corporation.  All rights reserved.
 C:\Windows\system32>whoami
 nt authority\system
 ```
+
+We can then get the root flag easily.
+
 ## Ending Thoughts
 
-This box is fun. In particular, it's a great box to practise about SMB enumeration.
-
-* The passwords used are strong. If the passwords were hashed, we might not have such an easy time. [Good read on hashing versus encrypting passwords.](https://www.darkreading.com/safely-storing-user-passwords-hashing-vs-encrypting/a/d-id/1269374)
+This box is fun. In particular, it's a great box to practise SMB enumeration.
