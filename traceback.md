@@ -168,7 +168,7 @@ Yes, we can run luvit as sysadmin without a password. Sounds good.
 
 From its [homepage](https://luvit.io/), we learn that it is like Node.js but written in lua.
 
-What's most important here is that:
+What's interesting here is that:
 
 >"This (luvit) can be used to run lua scripts as standalone servers, clients, or other tools."
 
@@ -190,7 +190,7 @@ With the -e flag, we can evaluate lua code. So the next step is to learn lua.
 
 **Learning lua**
 
-Google `how to execute system commads with lua`, and you will find the `os.execute` function.
+Google `how to execute system commands with lua`, and you will find the `os.execute` function.
 
 Let's use that to get a shell with sysadmin's privileges.
 
