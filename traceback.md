@@ -1,4 +1,4 @@
-# Traceback - hackthebox.eu
+# Traceback Write-up / Walkthrough - HTB
 
 ![traceback badge](images/traceback/tracebackbadge.jpg)
 
@@ -38,7 +38,7 @@ This site has been hacked by Xh4H who has kindly left a backdoor for all.
 Checking out the HTML source of the page reveals more clues.
 
 ```
-oot@kali:~# curl http://10.10.10.181/
+root@kali:~# curl http://10.10.10.181/
 SNIPPED
 		<h1>This site has been owned</h1>
 		<h2>I have left a backdoor for all the net. FREE INTERNETZZZ</h2>
