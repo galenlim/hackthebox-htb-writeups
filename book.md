@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Book Write-up / Walkthrough - HTB
+permalink: /book/
 ---
 # Book Write-up / Walkthrough - HTB
 
