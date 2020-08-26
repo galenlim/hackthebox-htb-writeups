@@ -1,3 +1,7 @@
+---
+layout: post
+title: Book Write-up / Walkthrough - HTB
+---
 # Book Write-up / Walkthrough - HTB
 
 ![book badge](images/book/bookbadge.jpg)
