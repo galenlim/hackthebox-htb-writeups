@@ -3,7 +3,7 @@ title:               attacktheory
 tagline:             'hack the box'
 description:         'hackthebox write-ups'
 # url:                 
-baseurl:             ''
+baseurl:             '/hackthebox'
 paginate:            1
 permalink:           :title
 
