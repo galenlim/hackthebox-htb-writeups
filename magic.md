@@ -1,4 +1,4 @@
-# Magic - hackthebox
+# Magic Write-up / Walkthrough - HTB
 
 ![magic badge](images/magic/badgemagic.jpg)
 
@@ -83,7 +83,7 @@ With the information gleaned from the page, we can attempt to generate an upload
 
 ## Uploading A Payload In An Image
 
-Instead of creating the request from scratch using Burp or python requests, we can create a stripped down version of the upload form, and let the browser do the work for us.
+Instead of creating the request from scratch using Burp or python requests, here we create a stripped down version of the upload form, and let the browser do the work for us.
 
 ```
 <form action="http://10.10.10.185/upload.php" method="post" enctype="multipart/form-data">
@@ -101,11 +101,11 @@ This is how our upload form looks like.
 
 ### Creating The Malicious Image
 
-With `wrjpgcom`, we can insert a php reverse shell payload into the comment field of the jpeg file.
+With `wrjpgcom`, we can insert a [php reverse shell](https://github.com/pentestmonkey/php-reverse-shell) payload into the comment field of the jpeg file.
 
 `wrjpgcom -comment "$(cat sorryfortheshell.php)" 5.jpeg > sorryforthis.php.jpeg`
 
-* The `$()` does a command substitution in bash. Here, it executes the command `cat sorryforthesheel.php` and replaces the `$()` expression with the stdout of the command.
+* The `$()` does a command substitution in bash. Here, it executes the command `cat sorryfortheshell.php` and replaces the `$()` expression with the stdout of the command.
 
 * `5.jpeg` is just an image I downloaded earlier from the website.
 
@@ -197,7 +197,7 @@ This grep does a recursive search for username values. It looks for usernames wi
 
 With the databse credentials, let's dump the database for further enumeration.
 
-[The php script here](https://gist.github.com/micc83/fe6b5609b3a280e5516e2a3e9f633675) offers a simple way to dump the database as mysql is not available.
+[The php script here](https://gist.github.com/micc83/fe6b5609b3a280e5516e2a3e9f633675) offers a simple way to dump the database as the mysql client is not available on the host.
 
 Replace the fields with the database credentials we gathered, and upload it.
 
@@ -315,7 +315,7 @@ root
 
 ## Thoughts
 
-This is an enjoyable box that reinforces some fundamentals.
+This is an enjoyable box that reinforces some fundamental skills.
 
 **SUID**
 
