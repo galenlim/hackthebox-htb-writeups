@@ -1,9 +1,9 @@
 # Setup
 title:               attacktheory
-tagline:             'hack the box'
-description:         'hackthebox write-ups'
+tagline:             'CTF Write-ups'
+description:         'Write-ups for CTFs and stuff'
 # url:                 
-baseurl:             '/hackthebox'
+baseurl:             '/writeups'
 paginate:            1
 permalink:           :title
 
