@@ -85,7 +85,7 @@ We will perform two basic searches:
 
 #### WHOIS
 
-A WHOIS search can usually reveal information about the domain registrant so that's our first step.
+A WHOIS search can usually reveal information about the domain registrant so that's our first step. You can do this on the command line or using an [online service](https://www.iana.org/whois?q=c0v1d.cf).
 
 ```
 $ whois c0v1d.cf
@@ -152,7 +152,7 @@ In the text (TXT) record, we find the **username and email information of the su
 
 With these information, we can proceed with a targeted search of the suspect's online presence with the aim of gathering the three required pieces of personal information.
 
-(While TXT records can be used to record any information, one common use of TXT record is to set the (Sender Policy Framework)[https://www.dmarcanalyzer.com/spf/] or SPF which is used to prevent a spammer from sending email on behalf of your domain. Although the SPF is not foolproof, it does help us gauge the likelihood of an email address being spoofed. In this sense, SPF record is relevant to investigating the origins of the email. Hence, even if we started with a more targeted nslookup, looking for TXT records would have been a sensible option.)
+(While TXT records can be used to record any information, one common use of TXT record is to set the [Sender Policy Framework](https://www.dmarcanalyzer.com/spf/) or SPF which is used to prevent a spammer from sending email on behalf of your domain. Although the SPF is not foolproof, it does help us gauge the likelihood of an email address being spoofed. In this sense, SPF record is relevant to investigating the origins of the email. Hence, even if we started with a more targeted nslookup, [looking for TXT records](https://support.mailessentials.gfi.com/hc/en-us/articles/360015116520) would have been a sensible option.)
 
 ## Intel-Gathering on the Suspect
 
