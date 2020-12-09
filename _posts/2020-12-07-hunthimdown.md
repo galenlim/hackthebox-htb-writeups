@@ -7,9 +7,13 @@ This is an OSINT challenge from the inaugural STACK The Flags in 2020. (Team bel
 
 ## Challenge Description
 
+***
+
 After solving the past two incidents, COViD sent a death threat via email today. Can you help us investigate the origins of the email and identify the suspect that is working for COViD? We will need as much information as possible so that we can perform our arrest!
 
 Required flag format: `govtech-csg{fullname-phone number[9digits]-residential postal code[6digits]}`
+
+***
 
 ### Death Threat Email
 
@@ -198,7 +202,9 @@ First, we note that the handle `lionelcxy` is not common, as its Google search r
 
 Furthermore, one post shows the Lau Pa Sat, implying that the profile owner either works or lives around that area. This corroborates with the general vicinity we are focusing on. Both Lau Pa Set and City Hall MRT Interchange lies within the Downtown Core area.
 
-The other post appears to be a share from Strava which is a service for tracking exercises. More importantly, it revealed that the suspect has a Strava account (https://www.strava.com/athletes/70911754). 
+Considering these observations, it's highly likely that this is the suspect we are after.
+
+Now, one of the posts appear to be a share from Strava which is a service for tracking exercises. More importantly, it revealed that the suspect has a Strava account (https://www.strava.com/athletes/70911754). 
 
 ![strava share](images/hunthimdown/stravashare.jpg)
 
@@ -234,3 +240,8 @@ Finally, putting the three pieces of information together, we got the flag!
 `govtech-csg{LionelChengXiangYi-963672918-018935}`
 
 All thanks to Lionel's oversharing on social media.
+
+Finally, to appreciate the challenge in context, let's try to relate it to a framework like the MITRE ATT&CK:
+
+* [Search Open Technical Databases](https://attack.mitre.org/techniques/T1597/)
+* [Search Open Websites/Domains](https://attack.mitre.org/techniques/T1593/)
