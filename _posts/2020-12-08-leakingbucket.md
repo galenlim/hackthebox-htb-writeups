@@ -103,13 +103,13 @@ done < "$list1"
 
 But then I learned that text processing with a shell loop is not the best idea. ([Read about it here.](https://unix.stackexchange.com/questions/169716/why-is-using-a-shell-loop-to-process-text-considered-bad-practice))
 
-So let's try to do better.
+So let's try to do better, with [awk](https://www.grymoire.com/Unix/Awk.html).
 
 `awk '{a[$0]} END{for (i in a) for (j in a) print i"-"j"-s4fet3ch"}' wordlist.txt > bucket_list.txt`
 
 Essentially, this command declares an associate array `a` using the first column (which is our list of words) as its index. Then we do a double loop through the keys to print all the possible bucket names.
 
-Other than having less to type, using awk is much faster, as you can see below. While performance is not a concern here, it can be in some cases, so this is a nice option to have.
+Other than having less to type, using awk is much faster, as you can see below. While performance is not a concern here given our small wordlist, it can be in some cases, so this is a nice option to have.
 
 ```
 $ time ./generatebucketlist.sh
@@ -181,7 +181,7 @@ Archive:  secret-files.zip
 
 ### Cracking with John The Ripper
 
-Let's try to crack it with the rockyou wordlist. To crack it with John The Ripper, we need to extact the hash with zip2john.
+Let's try to crack it. To crack it with John The Ripper, we need to extact the hash with zip2john.
 
 ```
 $ zip2john secret-files.zip -o flag.txt > hash           
@@ -215,7 +215,7 @@ A known-plaintext attack is possible when we have not only the ciphertext, but a
 
 In this case, if we can get hold of the unencrypted `STACK the Flags Consent and Indemnity Form.docx`, we stand a chance.
 
-A little bit of OSINT work here. By googling the exact document name, we found it on the CTF website. (https://ctf.tech.gov.sg/files/STACK%20the%20Flags%20Consent%20and%20Indemnity%20Form.docx)
+A little bit of OSINT work here. By googling the exact document name, [we found it on the CTF website](https://ctf.tech.gov.sg/files/STACK%20the%20Flags%20Consent%20and%20Indemnity%20Form.docx)
 
 After downloading it, we zip it up into `plaintext.zip`
 
@@ -278,7 +278,7 @@ Finally, to appreciate the challenge in context, let's try to relate it to a fra
 * [Cloud Service Discovery](https://attack.mitre.org/techniques/T1526/)
 * [Data Encrypted for Impact](https://attack.mitre.org/techniques/T1486/)
 
-References
+*References*
 
 * [A deep dive into AWS S3 access control](https://labs.detectify.com/2017/07/13/a-deep-dive-into-aws-s3-access-controls-taking-full-control-over-your-assets/)
 * [HackTricks - AWS S3](https://book.hacktricks.xyz/pentesting/pentesting-web/buckets/aws-s3)
